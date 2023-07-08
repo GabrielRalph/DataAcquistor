@@ -280,7 +280,7 @@ class CalibrationFrame extends HideShow {
     let c = p0.add(ps.div(2));
     let r2 = 1/0.7698;
     pointer.position = c;
-		await this.showMessageCountDown("Focus on the red dot<br/>as moves along the screen.<br/>$$")
+		await this.showMessageCountDown("Focus on the red dot<br/>as it moves along the screen.<br/>$$")
     await pointer.show();
 		this.recording = true;
 
