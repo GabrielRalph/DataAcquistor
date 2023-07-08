@@ -147,7 +147,7 @@ class DataAcquisitor extends SvgPlus {
     let d = input.times.prediction - input.times.start;
     if (d > this.max) this.max = d;
     this.ewad = l * (d) + (1-l)*this.ewad;
-    log("prediction", d);
+    // log("prediction", d);
     this.logStats("fexttime", Math.round(this.ewad) + "ms");
     this.logStats("mfexttime", Math.round(this.max) + "ms");
     this.showError(false);
@@ -223,6 +223,7 @@ class DataAcquisitor extends SvgPlus {
     await this.calibrator.calibrate1();
     log('Data Acquisition: method 2');
     await this.calibrator.calibrate2();
+    log('Data Acquisition: method 3');
     await this.calibrator.calibrate3();
     this.hideSubmit(false);
     Webcam.stopPredictions();

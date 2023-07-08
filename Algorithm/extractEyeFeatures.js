@@ -117,6 +117,7 @@ function getEyeBoxPoints(l, r, t, b){
   // Transform lr and tb by the y angle and z angle of lr
   // such that lr runs only along the x axis
   let ay = Math.atan(lr.z / lr.x);
+  // console.log(Math.round(ay * 180/Math.PI) + "deg");
   let lr_ = lr.rotateY(ay);
   let tb_ = tb.rotateY(ay);
   let az = Math.atan(lr_.y / lr_.x);

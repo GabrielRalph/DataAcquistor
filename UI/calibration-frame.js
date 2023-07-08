@@ -304,7 +304,7 @@ class CalibrationFrame extends HideShow {
 		for (let i = 0; i < number; i++) {
 			points.push(lurp4(Math.random(), Math.random(), tl, tr, bl, br));
 		}
-		await this.showMessageCountDown("Focus on the red dot<br/>as it appears randomly on the screen.<br/>$$");
+		await this.showMessageCountDown("Focus on the red dot<br/>as it appears randomly on the screen.<br/>Move your head a little as you do so.<br/> $$", 5);
 		await this.calibrateAtPoints(points, counts);
 	}
 
