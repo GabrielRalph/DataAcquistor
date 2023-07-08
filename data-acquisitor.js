@@ -77,7 +77,7 @@ const CENTERED = {
 
 class DataAcquisitor extends SvgPlus {
   onconnect(){
-    this.styles = {display: "block", width: "100%", height: "100%", position: "relative"};
+    this.styles = {display: "block", width: "100%", height: "100%", position: "relative", background: "white"};
 
     // Webcam and feeback process window
     let wcwindow = this.createChild("div", {styles: CENTERED});
@@ -130,7 +130,8 @@ class DataAcquisitor extends SvgPlus {
       top: 0,
       right: 0,
       "z-index": 100,
-      "text-align":"right"
+      "text-align":"right",
+      display: "none"
     }});
 
 
@@ -230,7 +231,7 @@ class DataAcquisitor extends SvgPlus {
     console.log(this.data);
     await this.calibrator.hide();
   }
-  filterData(samples = 50){
+  filterData(samples = 100){
     let {data} = this;
     for (let key in data) {
       let points = data[key];

@@ -297,7 +297,7 @@ class CalibrationFrame extends HideShow {
     await pointer.hide();
   }
 
-	async calibrate3(number = 10, counts = 1){
+	async calibrate3(number = 20, counts = 1){
 		let {tr, tl, bl, br} = this;
 		this.ctype = "random"
 		let points = [];
