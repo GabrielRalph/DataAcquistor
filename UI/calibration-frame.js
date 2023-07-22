@@ -80,9 +80,9 @@ function dotGrid(size, tl, tr, bl, br) {
 }
 
 class HideShow extends SvgPlus {
-  constructor(el) {
+  constructor(el = "div") {
     super(el);
-    this.hidden = true;
+    this.shown = false;
   }
 
 	set opacity(o){
@@ -90,6 +90,11 @@ class HideShow extends SvgPlus {
 			opacity: o,
 			styles: {opacity: o}
 		}
+	}
+
+	set disabled(value) {
+		this.opacity = value ? 0.5 : 1;
+		this.styles = {"pointer-events": value ? "none" : "all"}
 	}
 
   async show(duration = 400, hide = false) {
@@ -100,25 +105,26 @@ class HideShow extends SvgPlus {
     await this.waveTransition((t) => {
       this.opacity = t;
     }, duration, !hide);
-    this.hidden = hide;
+    this.shown = !hide;
     this._transitioning = false;
   }
 	async hide(duration = 400) {
 		await this.show(duration, true);
 	}
 
-  set hidden(value) {
-    value = !!value;
+  set shown(value) {
+    value = !value;
     if (value) {
-			this.opacity = 10;
+			this.opacity = 0;
       this.styles = {display: "none", "pointer-events": "none"};
     } else {
 			this.opacity = 1;
-      this.styles = {display: "block"};
+      this.styles = {display: "block", "pointer-events": "all"};
     }
+		this.hidden = value;
     this._hidden = value;
   }
-  get hidden(){return this._hidden;}
+  get shown(){return !this._hidden;}
 }
 
 class SvgResize extends SvgPlus {
@@ -291,11 +297,25 @@ class CalibrationFrame extends HideShow {
 			let w = new Vector(Math.cos(t)*Math.sin(2*t)*r2, Math.sin(t)*Math.sin(2*t)*r2);
 			pointer.position = c.add(w.mul(ps.div(2)));
 			for (let i = 0; i < speed; i++) await delay();
-			console.log(Math.round(window.performance.now() - t0));
     };
 		this.recording = false;
     await pointer.hide();
   }
+
+	async calibrate4(number = 20, counts = 1){
+		let {pointer} = this;
+
+		pointer.position = this.topleft;
+		await this.showMessageCountDown("Focus on the red dot<br/>as it moves along the screen.<br/>$$")
+    await pointer.show();
+		this.recording = true;
+		await pointer.moveTo(this.topright, 6000);
+		await pointer.moveTo(this.bottomright, 6000);
+		await pointer.moveTo(this.bottomleft, 6000);
+		await pointer.moveTo(this.topleft, 6000)
+		this.recording = false;
+		await pointer.hide();
+	}
 
 	async calibrate3(number = 20, counts = 1){
 		let {tr, tl, bl, br} = this;

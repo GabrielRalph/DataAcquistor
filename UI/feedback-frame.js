@@ -21,7 +21,7 @@ class FeedbackFrame extends SvgPlus {
 		this.styles = {
       display: "flex",
       transform: "scale(-1, 1)"
-      
+
     }
     let rel = this.createChild("div", {styles: {
 			position: "relative",

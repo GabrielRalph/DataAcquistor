@@ -1,7 +1,7 @@
 import {Vector3, Vector} from "../Utilities/vector3.js"
 
-const WIDTH = 27;
-const HEIGHT = 17;
+const WIDTH = 15;
+const HEIGHT = 8;
 
 
 // console.log(2*(WIDTH*HEIGHT + 4*3*3));
@@ -160,6 +160,7 @@ function encodeUTF8(uint8array) {
   }
   return utf8;
 }
+
 function decodeUTF8(utf8) {
   let n = utf8.length;
   let uint8array = new Uint8ClampedArray(n);
@@ -167,6 +168,14 @@ function decodeUTF8(utf8) {
     uint8array[i] = utf8.charCodeAt(i);
   }
   return uint8array
+}
+
+function norm1(utf8){
+  let norms = [];
+  for (let val of utf8) {
+    norms.push(val/255);
+  }
+  return norms;
 }
 
 function pixels2string(pixels) {
@@ -199,9 +208,9 @@ export function decode(string) {
       p1: [pr[0], pr[1], pr[2]],
       p2: [pr[3], pr[4], pr[5]],
       p3: [pr[6], pr[7], pr[8]],
-    }
+    },
+    feat: [...norm1(decodeUTF8(leftim)), ...norm1(decodeUTF8(rightim))],//, ...pl, ...pr],
   }
-
   return x;
 }
 

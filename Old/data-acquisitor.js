@@ -43,6 +43,7 @@ function diff(arr, val) {
   return arr2;
 }
 
+let SVM = await libsvm;
 
 
 
@@ -126,13 +127,26 @@ class DataAcquisitor extends SvgPlus {
     // Statistics Frame
     this.stats = {};
     this.statswindow = this.createChild("div", {styles: {
-      position: "fixed",
-      top: 0,
-      right: 0,
+
       "z-index": 100,
       "text-align":"right",
       display: "none"
     }});
+
+    this.pp = this.createChild("div", {styles: {
+      position: "fixed",
+      top: 0,
+      width: "10px",
+      height: "10px",
+      "border-radius": "10px",
+      background: "blue"
+    }})
+    this.setPPos = (x, y) => {
+      this.pp.styles = {
+        top: window.innerHeight * y + "px",
+        left: window.innerWidth * x + "px"
+      }
+    }
 
 
     // Setup Feature Prediction Listener
@@ -147,6 +161,14 @@ class DataAcquisitor extends SvgPlus {
     let d = input.times.prediction - input.times.start;
     if (d > this.max) this.max = d;
     this.ewad = l * (d) + (1-l)*this.ewad;
+
+    if (this.m1) {
+      let x = decode(input.prediction).feat;
+      let sx = this.m1.predictOne(x);
+      let sy = this.m2.predictOne(x);
+      console.log(sx, sy, window.innerHeight);
+      this.setPPos(sx,sy);
+    }
     // log("prediction", d);
     this.logStats("fexttime", Math.round(this.ewad) + "ms");
     this.logStats("mfexttime", Math.round(this.max) + "ms");
@@ -228,20 +250,71 @@ class DataAcquisitor extends SvgPlus {
     this.hideSubmit(false);
     Webcam.stopPredictions();
     this.filterData();
+    console.log(this.traindata);
+    this.createModel();
     log("data acquired");
-    console.log(this.data);
     await this.calibrator.hide();
   }
-  filterData(samples = 100){
+
+  createModel(){
+    const m1 = new SVM({
+        kernel: SVM.KERNEL_TYPES.RBF, // The type of kernel I want to use
+        type: SVM.SVM_TYPES.EPSILON_SVR,    // The type of SVM I want to run
+        gamma: 1,                     // RBF kernel gamma parameter
+    });
+    m1.train(this.traindata.trainx, this.traindata.trainy1);
+    const m2 = new SVM({
+        kernel: SVM.KERNEL_TYPES.RBF, // The type of kernel I want to use
+        type: SVM.SVM_TYPES.EPSILON_SVR,    // The type of SVM I want to run
+        gamma: 1,                     // RBF kernel gamma parameter
+    });
+    m2.train(this.traindata.trainx, this.traindata.trainy2);
+
+    let error = 0;
+    for (let i = 0; i < this.val.valx.length; i++) {
+      let sx = m1.predictOne(this.val.valx[i]);
+      let sy = m2.predictOne(this.val.valx[i]);
+      error += Math.sqrt(Math.pow(this.val.valy1[i] - sx, 2) +  Math.pow(this.val.valy2[i] - sy, 2));
+    }
+    console.log("error " + error/this.val.valx.length);
+
+    this.m1 = m1;
+    this.m2 = m2;
+  }
+  filterData(samples = 500){
     let {data} = this;
+    let trainx = [];
+    let trainy1 = [];
+    let trainy2 = [];
+    let valx = [];
+    let valy1 = [];
+    let valy2 = [];
     for (let key in data) {
       let points = data[key];
       let tps = linspace(0, points.length - 1, samples);
       for (let i = 0; i < tps.length; i++) tps[i] = Math.round(tps[i]);
       let newPoints = new Array(samples);
-      for (let i = 0; i < samples; i++) newPoints[i] = points[tps[i]];
+      for (let i = 0; i < samples; i++) {
+        let point = points[tps[i]];
+        let x = decode(point.x).feat;
+        let y1 = new Vector(point.y.split(','));
+        let y2 = y1.y;
+        y1 = y1.x;
+        if (key == "random") {
+          valx.push(x);
+          valy1.push(y1);
+          valy2.push(y2);
+        } else {
+          trainx.push(x);
+          trainy1.push(y1);
+          trainy2.push(y2);
+        }
+        newPoints[i] = point;
+      }
       data[key] = newPoints;
     }
+    this.traindata = {trainx, trainy1, trainy2};
+    this.val = {valx, valy1, valy2};
   }
 
   hideSubmit(op = true){
