@@ -48,6 +48,13 @@ async function transition(callBack, duration) {
   }
 }
 
+function linspace(start, end, incs) {
+  let range = end - start;
+  let dx = range / (incs - 1);
+  let space = [];
+  for (let i = 0; i < incs; i ++) space.push(start + i * dx);
+  return space;
+}
 
 async function delay(time){
   return new Promise((resolve, reject) => {
@@ -130,6 +137,7 @@ class HideShow extends SvgPlus {
 class SvgResize extends SvgPlus {
   constructor(){
     super("svg");
+		this.stop = () => {};
     this.styles = {width: "100%", height: "100%"}
   }
   resize(){
@@ -138,11 +146,21 @@ class SvgResize extends SvgPlus {
     this.W = bbox.width;
     this.H = bbox.height;
   }
+	draw(){}
 
-  resizeOnFrame(){
+	resizeOnFrame(){this.start()}
+  start(){
+		let stop = false;
+		this.stop();
+		this.stop = () => {stop = true}
     let next = () => {
-      this.resize();
-      window.requestAnimationFrame(next);
+			if (!stop) {
+				this.resize();
+				this.draw();
+				window.requestAnimationFrame(next);
+			} else {
+				this.stop = () => {}
+			}
     }
     window.requestAnimationFrame(next);
   }
@@ -259,7 +277,7 @@ class CalibrationFrame extends HideShow {
 	get br(){return this.bottomright;}
 
 
-	async calibrate1(grid = 3, counts = 3) {
+	async calibrate1(grid = 3, counts = 4) {
 		let {tl, tr, bl, br} = this;
 		this.ctype = "grid" + grid;
 		let points = dotGrid(grid, tl, tr, bl, br);
@@ -328,6 +346,27 @@ class CalibrationFrame extends HideShow {
 		await this.calibrateAtPoints(points, counts);
 	}
 
+	async calibrate5(number = 20, counts = 1){
+		let {pointer} = this;
+
+		let ext = [[this.tl, this.bl, this.tr, this.br], [this.tl, this.tr, this.bl, this.br]];
+		await this.showMessageCountDown("Focus on the red dot<br/>as it moves along the screen.<br/>$$")
+		for (let [pa1, pa2, pb1, pb2] of ext) {
+			let pairs = linspace(1, 0, 5).map(t =>
+				[pa1.mul(t).add(pa2.mul(1-t)),pb1.mul(t).add(pb2.mul(1-t))]
+			)
+			for (let [left, right] of pairs) {
+				pointer.position = left;
+				await pointer.show();
+				this.recording = true;
+				await pointer.moveTo(right, 6000);
+				this.recording = false;
+				await pointer.hide();
+			}
+		}
+	}
+
+
 
 	async calibrateAtPoints(points, counts) {
 		let {pointer} = this;
@@ -392,4 +431,4 @@ class CalibrationFrame extends HideShow {
 }
 
 // SvgPlus.defineHTMLElement(CalibrationFrame);
-export {CalibrationFrame, HideShow}
+export {CalibrationFrame, HideShow, SvgResize, dotGrid}

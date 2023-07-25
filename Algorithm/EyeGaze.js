@@ -37,6 +37,8 @@ const ModelParams = {
 }
 const ModelTrainers = {
   svm: (train) => {
+    let kfilter = KalmanFilter.default(0.5);
+
     const mx = new SVM(ModelParams.svm);
     const my = new SVM(ModelParams.svm);
     mx.train(train.map(u => u[0]), train.map(u => u[1].x));
@@ -47,7 +49,9 @@ const ModelTrainers = {
       predict: (x) => {
         let sx = mx.predictOne(x);
         let sy = my.predictOne(x);
-        return new Vector(sx, sy);
+        let v = new Vector(kfilter.update([sx, sy]));
+
+        return v;
       }
     }
   },
@@ -130,7 +134,12 @@ function validate_models(val_data) {
   return stats;
 }
 
-export function trainModel(data, samples) {
+export function trainModel(data, modelName, samples = Math.round(data.length * 0.5)) {
+  let [train, validate] = sampleSelect(data, samples);
+  return ModelTrainers[modelName](train);
+}
+
+export function train_all_models(data, samples) {
   let [train, validate] = sampleSelect(data, samples);
 
   let models = {};

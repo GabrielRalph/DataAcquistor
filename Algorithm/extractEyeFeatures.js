@@ -1,7 +1,7 @@
 import {Vector3, Vector} from "../Utilities/vector3.js"
 
-const WIDTH = 15;
-const HEIGHT = 8;
+const WIDTH = 20;
+const HEIGHT = 13;
 
 
 // console.log(2*(WIDTH*HEIGHT + 4*3*3));
@@ -210,6 +210,7 @@ export function decode(string) {
       p3: [pr[6], pr[7], pr[8]],
     },
     feat: [...norm1(decodeUTF8(leftim)), ...norm1(decodeUTF8(rightim))],//, ...pl, ...pr],
+    feat2: [...pl, ...pr],
   }
   return x;
 }

@@ -3,7 +3,7 @@ import * as EyeGaze from "../Algorithm/EyeGaze.js"
 import * as FaceMesh from "../Algorithm/FaceMesh.js"
 import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
 import * as Webcam from "../Utilities/Webcam.js"
-import {CalibrationFrame, HideShow} from "../UI/calibration-frame.js"
+import {CalibrationFrame, HideShow, SvgResize, dotGrid} from "../UI/calibration-frame.js"
 import {FeedbackFrame} from "../UI/feedback-frame.js"
 
 async function delay(time){
@@ -24,8 +24,22 @@ async function parallel() {
   return res;
 }
 
-function pprops(color) {
-  return
+
+
+class SvgGrid extends SvgResize {
+  draw(){
+    let s = 3;
+    let {W, H} = this;
+    if (this.lastW != W || this.lastH != H) {
+      this.innerHTML = "";
+      this.lastW = W;
+      this.lastH = H;
+      let grid = dotGrid(7, new Vector(s), new Vector(W-s, s), new Vector(s, H-s), new Vector(W-s, H-s));
+      for (let p of grid) {
+        this.createChild("circle", {cx: p.x, cy: p.y, r: s})
+      }
+    }
+  }
 }
 
 class EyesFeedbackFrame extends HideShow{
@@ -187,11 +201,21 @@ class EyeApp extends SvgPlus {
       height: "100%",
       position: "fixed",
       background: "white",
+
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
     };
+
+    let grid = this.createChild(SvgGrid);
+    grid.styles = {
+      width: `calc(100% - 2em)`,
+      height: `calc(100% - 2em)`,
+      margin: '1em',
+      opacity: 0.3
+    };
+    grid.start();
 
     this.start_window = this.createChild(HideShow);
     this.start_message = this.start_window.createChild("div");
@@ -232,25 +256,12 @@ class EyeApp extends SvgPlus {
     //
 
     let pointers = this.createChild(Pointers);
-    pointers.add("svm");
-    pointers.add("ridge");
-    pointers.add("ridgekalman");
+    pointers.add("p1");
+    pointers.add("p2");
+    this.pointers = pointers;
 
     this.calibrator = this.createChild(CalibrationFrame);
-    Webcam.addPredictionListener((input) => {
-      if (this.calibrate_button.shown) {
-        this.calibrate_button.disabled = !!input.error;
-      }
-      if (!input.error && this.calibrator.recording) {
-        train_data.push([input.feature, this.calibrator.position]);
-      }
-
-      for (let pname in pointers.pointers) {
-        let v = input.eye ? input.eyeall[pname] : null;
-        pointers.set(pname, v);
-      }
-      pointers.updateBounds();
-    })
+    Webcam.addPredictionListener((input) => this.onPrediction(input))
   }
 
   async startWebcam(){
@@ -271,18 +282,63 @@ class EyeApp extends SvgPlus {
   }
 
   async calibrate(){
+    train_data = [];
     await this.calibrator.show();
     this.feedback.styles = {transform: "none", top: "1em", left:"1em"};
     this.feedback.size = 0.2;
     // await this.calibrator.calibrate1();
-    await this.calibrator.calibrate2();
-    await this.calibrator.calibrate4();
+    await this.calibrator.calibrate5();
+    // await this.calibrator.calibrate4();
+    // await this.calibrator.hide();
+    this.m1 = EyeGaze.trainModel(train_data, "ridge", Math.round(train_data.length * 0.8));
+
+    train_data2 = [];
+    for (let [oldx1, oldy, oldx2] of train_data) {
+      let y1 = this.m1.predict(oldx1);
+      let x2 = [...oldx2, y1.x, y1.y]
+      train_data2.push([x2, oldy]);
+    }
+
+    await this.calibrator.calibrate5();
+    // console.log(train_data2);
+    this.m2 = EyeGaze.trainModel(train_data2, "ridge");
+
     await this.calibrator.hide();
-    EyeGaze.trainModel(train_data, Math.round(train_data.length * 0.8));
+  }
+
+  onPrediction(input){
+    if (this.calibrate_button.shown) {
+      this.calibrate_button.disabled = !!input.error;
+    }
+    let y1 = null;
+    let y2 = null;
+    if (!input.error) {
+      let x1 = input.feature;
+      let x2 = input.info.feat2;
+      if (this.calibrator.recording) {
+        train_data.push([x1, this.calibrator.position, x2]);
+      }
+
+      if (this.m1) {
+        y1 = this.m1.predict(x1);
+        x2 = [...x2, y1.x, y1.y];
+        if (this.calibrator.recording) {
+          train_data2.push([x2, this.calibrator.position]);
+        }
+
+        if (this.m2) {
+          y2 = this.m2.predict(x2);
+        }
+      }
+    }
+
+    this.pointers.set("p1", y1);
+    this.pointers.set("p2", y2);
   }
 }
 
-let train_data = []
+let train_data = [];
+let train_data2 = [];
 
 Webcam.setPredictor((input) => {
   let lastFeatures = null;
@@ -291,12 +347,9 @@ Webcam.setPredictor((input) => {
     if (!("left" in points)) throw 'No face detected'
     input.points = points;
     lastFeatures = extractEyeFeatures(points, input.canvas);
-    let x = decode(lastFeatures).feat;
-    let yall = {};
-    let y = EyeGaze.predict(x, yall);
-    input.feature = x;
-    input.eye = y;
-    input.eyeall = yall;
+    let x = decode(lastFeatures);
+    input.info = x;
+    input.feature = x.feat;
   } catch (e) {
     lastFeatures = null;
     console.log("prediction error:", e);
