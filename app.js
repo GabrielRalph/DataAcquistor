@@ -1,7 +1,8 @@
 import {SvgPlus, Vector} from "../SvgPlus/4.js"
-import * as EyeGaze from "../Algorithm/EyeGaze.js"
-import * as FaceMesh from "../Algorithm/FaceMesh.js"
-import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
+import * as zip from "https://deno.land/x/zipjs/index.js";
+// import * as EyeGaze from "../Algorithm/EyeGaze.js"
+// import * as FaceMesh from "../Algorithm/FaceMesh.js"
+// import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
 import * as Webcam from "../Utilities/Webcam.js"
 import {CalibrationFrame, HideShow, SvgResize, dotGrid} from "../UI/calibration-frame.js"
 import {FeedbackFrame} from "../UI/feedback-frame.js"
@@ -254,14 +255,62 @@ class EyeApp extends SvgPlus {
     this.feedback.hideEyes();
     this.feedback.size = 0.5;
     //
+    this.results = this.createChild(HideShow);
+    this.results.styles = {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)"
+    }
+    this.rimage = this.results.createChild("img", {styles: {"border-radius": "1em"}});
+    this.resultButtons = this.results.createChild(HideShow);
+    this.resultButtons.styles = {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+     
+    }
+    let rel = this.resultButtons.createChild("div", {styles: {
+      display: "flex",
+      fill: "white",
+      "font-size": "3em",
+      gap: `0.3em`,
+      background: "#0006",
+      "border-radius": "0.3em",
+      padding: "0.3em",
+    }})
+    let play = rel.createChild("div", {style: {cursor: "pointer", display: "flex"}, content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 384 512"><<path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>`})
+    let save = rel.createChild("div", {style: {cursor: "pointer", display: "flex"}, content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 448 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32H288c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></svg>`})
+    play.onclick = () => this.playRecording();
+    save.onclick = () => this.saveRecording();
 
     let pointers = this.createChild(Pointers);
     pointers.add("p1");
     pointers.add("p2");
     this.pointers = pointers;
 
+
+   
     this.calibrator = this.createChild(CalibrationFrame);
-    Webcam.addPredictionListener((input) => this.onPrediction(input))
+    Webcam.addPredictionListener((input) => this.onPrediction(input));
+
+    
+  }
+
+  async saveRecording(){
+    const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
+    await Promise.all(
+      images.map(([ts, pos, img]) => zipWriter.add(`${ts}_(${pos}).jpeg`, new zip.Data64URIReader(img)) )
+    );
+    let blob = await zipWriter.close();
+    console.log(blob);
+    let a = this.createChild("a", {
+      download: "eyedata_" + (new Date()).getTime() + ".zip",
+      href: URL.createObjectURL(blob),
+      textContent: "Download zip file",
+    })
+    a.click();
   }
 
   async startWebcam(){
@@ -281,79 +330,113 @@ class EyeApp extends SvgPlus {
     }
   }
 
+
+
+  async playRecording(){
+    console.log(images);
+    if (!this._playing) {
+      this._playing = true;
+      await this.results.show()
+      await this.resultButtons.hide();
+      let lastTime = null
+      for (let [time, point, image] of images) {
+        if (lastTime == null) lastTime = time;
+        this.rimage.props = {src: image};
+        this.pointers.set("p1", point);
+        await delay(time - lastTime);
+        lastTime = time;
+      }
+      this.resultButtons.show();
+      this._playing = false;
+    }
+  }
+
   async calibrate(){
-    train_data = [];
+    // train_data = [];
+    images = [];
+
     await this.calibrator.show();
     this.feedback.styles = {transform: "none", top: "1em", left:"1em"};
     this.feedback.size = 0.2;
     // await this.calibrator.calibrate1();
-    await this.calibrator.calibrate5();
+    await this.calibrator.calibrate5(4000);
     // await this.calibrator.calibrate4();
     // await this.calibrator.hide();
-    this.m1 = EyeGaze.trainModel(train_data, "ridge", Math.round(train_data.length * 0.8));
+    // this.m1 = EyeGaze.trainModel(train_data, "ridge", Math.round(train_data.length * 0.8));
+    // console.log(this.m1);
+    // train_data2 = [];
+    // for (let [oldx1, oldy, oldx2] of train_data) {
+    //   let y1 = this.m1.predict(oldx1);
+    //   let x2 = [...oldx2, y1.x, y1.y]
+    //   train_data2.push([x2, oldy]);
+    // }
 
-    train_data2 = [];
-    for (let [oldx1, oldy, oldx2] of train_data) {
-      let y1 = this.m1.predict(oldx1);
-      let x2 = [...oldx2, y1.x, y1.y]
-      train_data2.push([x2, oldy]);
-    }
-
-    await this.calibrator.calibrate5();
+    console.log(images.length);
+    // await this.calibrator.calibrate5();
     // console.log(train_data2);
-    this.m2 = EyeGaze.trainModel(train_data2, "ridge");
+    // this.m2 = EyeGaze.trainModel(train_data2, "ridge");
 
     await this.calibrator.hide();
+    await this.playRecording();
+
+
+   
   }
 
   onPrediction(input){
-    if (this.calibrate_button.shown) {
-      this.calibrate_button.disabled = !!input.error;
-    }
-    let y1 = null;
-    let y2 = null;
-    if (!input.error) {
-      let x1 = input.feature;
-      let x2 = input.info.feat2;
-      if (this.calibrator.recording) {
-        train_data.push([x1, this.calibrator.position, x2]);
-      }
-
-      if (this.m1) {
-        y1 = this.m1.predict(x1);
-        x2 = [...x2, y1.x, y1.y];
-        if (this.calibrator.recording) {
-          train_data2.push([x2, this.calibrator.position]);
-        }
-
-        if (this.m2) {
-          y2 = this.m2.predict(x2);
-        }
-      }
+    // console.log(input.canvas.getDataURL("image/ong"));
+    // if (this.calibrate_button.shown) {
+    //   this.calibrate_button.disabled = !!input.error;
+    // }
+    // let y1 = null;
+    // let y2 = null;
+    if (this.calibrator.recording || this.capture) {
+      images.push([(new Date()).getTime(), this.calibrator.position, input.canvas.toDataURL("image/jpeg")]);
     }
 
-    this.pointers.set("p1", y1);
-    this.pointers.set("p2", y2);
+    // if (!input.error) {
+    //   let x1 = input.feature;
+    //   let x2 = input.info.feat2;
+    //   if (this.calibrator.recording) {
+    //     train_data.push([x1, this.calibrator.position, x2]);
+    //   }
+
+    //   if (this.m1) {
+    //     y1 = this.m1.predict(x1);
+    //     x2 = [...x2, y1.x, y1.y];
+    //     if (this.calibrator.recording) {
+    //       train_data2.push([x2, this.calibrator.position]);
+    //     }
+
+    //     if (this.m2) {
+    //       y2 = this.m2.predict(x2);
+    //     }
+    //   }
+    // }
+
+    // this.pointers.set("p1", y1);
+    // this.pointers.set("p2", y2);
   }
 }
 
-let train_data = [];
-let train_data2 = [];
+// let train_data = [];
+let images = [];
+// let train_data2 = [];
 
 Webcam.setPredictor((input) => {
   let lastFeatures = null;
   try {
-    let points = FaceMesh.getFacePointsFromVideo(input.video);
-    if (!("left" in points)) throw 'No face detected'
-    input.points = points;
-    lastFeatures = extractEyeFeatures(points, input.canvas);
-    let x = decode(lastFeatures);
-    input.info = x;
-    input.feature = x.feat;
+    // let points = FaceMesh.getFacePointsFromVideo(input.video);
+    // if (!("left" in points)) throw 'No face detected'
+    // input.points = points;
+    // lastFeatures = extractEyeFeatures(points, input.canvas);
+    // let x = decode(lastFeatures);
+    // input.info = x;
+    // input.feature = x.feat;
   } catch (e) {
-    lastFeatures = null;
-    console.log("prediction error:", e);
-    throw e;
+    // lastFeatures = null;
+    // console.log("prediction error:", e);
+    // throw e;
   }
   return lastFeatures;
 })

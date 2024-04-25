@@ -346,7 +346,7 @@ class CalibrationFrame extends HideShow {
 		await this.calibrateAtPoints(points, counts);
 	}
 
-	async calibrate5(number = 20, counts = 1){
+	async calibrate5(speed = 6000){
 		let {pointer} = this;
 
 		let ext = [[this.tl, this.bl, this.tr, this.br], [this.tl, this.tr, this.bl, this.br]];
@@ -359,7 +359,7 @@ class CalibrationFrame extends HideShow {
 				pointer.position = left;
 				await pointer.show();
 				this.recording = true;
-				await pointer.moveTo(right, 6000);
+				await pointer.moveTo(right, speed);
 				this.recording = false;
 				await pointer.hide();
 			}
