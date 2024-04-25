@@ -299,18 +299,24 @@ class EyeApp extends SvgPlus {
   }
 
   async saveRecording(){
-    const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
-    await Promise.all(
-      images.map(([ts, pos, img]) => zipWriter.add(`${ts}_(${pos}).jpeg`, new zip.Data64URIReader(img)) )
-    );
-    let blob = await zipWriter.close();
-    console.log(blob);
-    let a = this.createChild("a", {
-      download: "eyedata_" + (new Date()).getTime() + ".zip",
-      href: URL.createObjectURL(blob),
-      textContent: "Download zip file",
-    })
-    a.click();
+    if (!this._saving) {
+      this._saving = true;
+      this.resultButtons.disabled = true;
+      const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
+      await Promise.all(
+        images.map(([ts, pos, img]) => zipWriter.add(`${ts}_(${pos}).jpeg`, new zip.Data64URIReader(img)) )
+      );
+      let blob = await zipWriter.close();
+      console.log(blob);
+      let a = this.createChild("a", {
+        download: "eyedata_" + (new Date()).getTime() + ".zip",
+        href: URL.createObjectURL(blob),
+        textContent: "Download zip file",
+      })
+      a.click();
+      this.resultButtons.disabled =false;
+      this._saving = false;
+    }
   }
 
   async startWebcam(){
