@@ -1,6 +1,6 @@
 import {SvgPlus, Vector} from "../SvgPlus/4.js"
 import * as zip from "https://deno.land/x/zipjs/index.js";
-// import * as EyeGaze from "../Algorithm/EyeGaze.js"
+import * as EyeGaze from "../Algorithm/EyeGaze.js"
 // import * as FaceMesh from "../Algorithm/FaceMesh.js"
 // import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
 import * as Webcam from "../Utilities/Webcam.js"
@@ -304,7 +304,7 @@ class EyeApp extends SvgPlus {
       this.resultButtons.disabled = true;
       const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
       await Promise.all(
-        images.map(([ts, pos, img]) => zipWriter.add(`${ts}_(${pos}).jpeg`, new zip.Data64URIReader(img)) )
+        images.map(([ts, pos, img, ctype]) => zipWriter.add(`${ts}_(${pos})_${ctype}.jpeg`, new zip.Data64URIReader(img)) )
       );
       let blob = await zipWriter.close();
       console.log(blob);
@@ -397,7 +397,7 @@ class EyeApp extends SvgPlus {
     // let y1 = null;
     // let y2 = null;
     if (this.calibrator.recording || this.capture) {
-      images.push([(new Date()).getTime(), this.calibrator.position, input.canvas.toDataURL("image/jpeg")]);
+      images.push([(new Date()).getTime(), this.calibrator.position, input.canvas.toDataURL("image/jpeg"), this.calibrator.ctype]);
     }
 
     // if (!input.error) {

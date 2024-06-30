@@ -279,7 +279,7 @@ class CalibrationFrame extends HideShow {
 
 	async calibrate1(grid = 3, counts = 4) {
 		let {tl, tr, bl, br} = this;
-		this.ctype = "grid" + grid;
+		this.ctype = "g" + grid;
 		let points = dotGrid(grid, tl, tr, bl, br);
 		await this.showMessageCountDown("Focus on the red dot<br/>as it appears on the screen.<br/>$$");
 		await this.calibrateAtPoints(points, counts);
@@ -346,13 +346,13 @@ class CalibrationFrame extends HideShow {
 		await this.calibrateAtPoints(points, counts);
 	}
 
-	async calibrate5(speed = 6000){
+	async calibrate5(speed = 4000){
 		let {pointer} = this;
-
+    this.ctype = "m"
 		let ext = [[this.tl, this.bl, this.tr, this.br], [this.tl, this.tr, this.bl, this.br]];
 		await this.showMessageCountDown("Focus on the red dot<br/>as it moves along the screen.<br/>$$")
 		for (let [pa1, pa2, pb1, pb2] of ext) {
-			let pairs = linspace(1, 0, 5).map(t =>
+			let pairs = linspace(1, 0, 7).map(t =>
 				[pa1.mul(t).add(pa2.mul(1-t)),pb1.mul(t).add(pb2.mul(1-t))]
 			)
 			for (let [left, right] of pairs) {
@@ -364,6 +364,8 @@ class CalibrationFrame extends HideShow {
 				await pointer.hide();
 			}
 		}
+
+    await this.calibrate1();
 	}
 
 
