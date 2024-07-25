@@ -4,7 +4,7 @@ import * as EyeGaze from "../Algorithm/EyeGaze.js"
 // import * as FaceMesh from "../Algorithm/FaceMesh.js"
 // import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
 import * as Webcam from "../Utilities/Webcam.js"
-import {CalibrationFrame, HideShow, SvgResize, dotGrid} from "../UI/calibration-frame.js"
+import {CalibrationFrame, HideShow, SvgResize, dotGrid, defaultCalibration} from "../UI/calibration-frame.js"
 import {FeedbackFrame} from "../UI/feedback-frame.js"
 
 async function delay(time){
@@ -23,6 +23,48 @@ async function parallel() {
     res.push(await argument);
   }
   return res;
+}
+
+
+
+class CalibrationParams extends SvgPlus {
+  constructor() {
+    super("div");
+    this.class = "calibration-params";
+    let rel = this.createChild("div", {class: "rel"});
+    let inputs = {
+
+    }
+    for (let key in defaultCalibration) {
+      inputs[key] = {}
+      let row = rel.createChild("div", {class: "row"});
+      row.createChild("div", {content: key});
+      for (let key2 in defaultCalibration[key]) {
+        let val = defaultCalibration[key][key2]
+        let input = row.createChild("div", {class: "input"});
+        input.createChild("div", {content: key2, class: "i-title"});
+        let isNum = typeof val === "number";
+        let i = input.createChild("input", {type:  isNum ? "number" : "checkbox", value: val, checked: val})
+        inputs[key][key2] = () => {
+          return isNum ? parseFloat(i.value) : i.checked;
+        }
+      }
+    }
+    this.inputs = inputs
+    // this.createChild("div", {class: "close", content: "X"});
+  }
+
+  get value(){
+    let {inputs} = this;
+    let value = {}
+    for (let key in inputs) {
+      value[key] = {}
+      for (let key2 in inputs[key]) {
+        value[key][key2] = inputs[key][key2]()
+      }
+    }
+    return value;
+  }
 }
 
 
@@ -209,6 +251,7 @@ class EyeApp extends SvgPlus {
       bottom: 0,
     };
 
+
     let grid = this.createChild(SvgGrid);
     grid.styles = {
       width: `calc(100% - 2em)`,
@@ -290,12 +333,10 @@ class EyeApp extends SvgPlus {
     pointers.add("p2");
     this.pointers = pointers;
 
-
+    this.params = this.createChild(CalibrationParams);
    
     this.calibrator = this.createChild(CalibrationFrame);
     Webcam.addPredictionListener((input) => this.onPrediction(input));
-
-    
   }
 
   async saveRecording(){
@@ -358,29 +399,14 @@ class EyeApp extends SvgPlus {
   }
 
   async calibrate(){
-    // train_data = [];
     images = [];
 
     await this.calibrator.show();
     this.feedback.styles = {transform: "none", top: "1em", left:"1em"};
     this.feedback.size = 0.2;
-    // await this.calibrator.calibrate1();
-    await this.calibrator.calibrate5(4000);
-    // await this.calibrator.calibrate4();
-    // await this.calibrator.hide();
-    // this.m1 = EyeGaze.trainModel(train_data, "ridge", Math.round(train_data.length * 0.8));
-    // console.log(this.m1);
-    // train_data2 = [];
-    // for (let [oldx1, oldy, oldx2] of train_data) {
-    //   let y1 = this.m1.predict(oldx1);
-    //   let x2 = [...oldx2, y1.x, y1.y]
-    //   train_data2.push([x2, oldy]);
-    // }
 
-    console.log(images.length);
-    // await this.calibrator.calibrate5();
-    // console.log(train_data2);
-    // this.m2 = EyeGaze.trainModel(train_data2, "ridge");
+    await this.calibrator.calibrate(this.params.value);
+   
 
     await this.calibrator.hide();
     await this.playRecording();

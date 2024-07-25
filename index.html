@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <title></title>
     <script src = "../Algorithm/SVM/wasm/libsvm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
   </head>
   <body>
     <div id = "load">
@@ -36,6 +37,64 @@
       display: inline-block;
       cursor: pointer;
       background: white;
+    }
+
+    .calibration-params {
+      position: absolute;
+      top: 0.5em;
+      left: 0.5em;
+     
+      padding: 0.5em;
+      color: white;
+      background: rgb(44, 43, 43);
+      border-radius: 2em;
+    }
+    .rel {
+      position: relative;
+      gap: 0.5em;
+      display: flex;
+      flex-direction: column;
+    }
+    .close {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      background: rgb(44, 43, 43);
+      padding: 0.5em;
+      border-radius: 3em 0 0 3em;
+      transform: translate(-99%, -50%);
+      width: 1em;
+      height: 2em;
+      line-height: 2em;
+      text-align: center;
+    }
+
+    .row {
+      display: flex;
+      gap: 1em;
+      background: #fff1;
+      padding: 1em;
+      border-radius: 1.8em;
+    }
+    .row > *:first-child {
+      font-weight: bold;
+      font-size: 1.3em;
+    }
+    .input {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      align-items: center;
+    }
+    .calibration-params input {
+      background: #fff1;
+      color: white;
+      border: none;
+      border-radius: 2em;
+      padding: 0.5em 1em;
+    }
+    .calibration-params input[type=number] {
+      width: 4em;
     }
   </style>
 </html>
