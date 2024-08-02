@@ -1,29 +1,12 @@
-import {SvgPlus, Vector} from "../SvgPlus/4.js"
+import {SvgPlus, Vector} from "./SvgPlus/4.js"
 import * as zip from "https://deno.land/x/zipjs/index.js";
-import * as EyeGaze from "../Algorithm/EyeGaze.js"
-// import * as FaceMesh from "../Algorithm/FaceMesh.js"
-// import {extractEyeFeatures, renderBoxSection, decode} from "../Algorithm/extractEyeFeatures.js"
-import * as Webcam from "../Utilities/Webcam.js"
-import {CalibrationFrame, HideShow, SvgResize, dotGrid, defaultCalibration} from "../UI/calibration-frame.js"
-import {FeedbackFrame} from "../UI/feedback-frame.js"
-
-async function delay(time){
-  return new Promise((resolve, reject) => {
-    if (time) {
-      setTimeout(resolve, time);
-    } else {
-      window.requestAnimationFrame(resolve);
-    }
-  })
-}
-
-async function parallel() {
-  let res = [];
-  for (let argument of arguments) {
-    res.push(await argument);
-  }
-  return res;
-}
+import * as EyeGaze from "./Algorithm/EyeGaze.js"
+import * as Webcam from "./Utilities/Webcam.js"
+import {CalibrationFrame, defaultCalibration} from "./UI/calibration-frame.js"
+import {FeedbackFrame} from "./UI/feedback-frame.js"
+import { delay, parallel } from "./Utilities/usefull-funcs.js";
+import { HideShow, SvgResize} from "./Utilities/basic-ui.js";
+import { getModels } from "./Algorithm/ModelLibrary.js";
 
 
 
@@ -33,7 +16,6 @@ class CalibrationParams extends SvgPlus {
     this.class = "calibration-params";
     let rel = this.createChild("div", {class: "rel"});
     let inputs = {
-
     }
     for (let key in defaultCalibration) {
       inputs[key] = {}
@@ -45,13 +27,56 @@ class CalibrationParams extends SvgPlus {
         input.createChild("div", {content: key2, class: "i-title"});
         let isNum = typeof val === "number";
         let i = input.createChild("input", {type:  isNum ? "number" : "checkbox", value: val, checked: val})
-        inputs[key][key2] = () => {
-          return isNum ? parseFloat(i.value) : i.checked;
+        inputs[key][key2] = {
+          get: () => {
+            return isNum ? parseFloat(i.value) : i.checked;
+          },
+          set: (val) => {
+            if(isNum) i.value = val;
+            else i.checked = val;
+          }
+        } 
+      }
+    }
+    this.inputs = inputs;
+
+    let r = rel.createChild("div", {class: "row"});
+    r.createChild("div", {content: "Model"});
+    let s = r.createChild("select");
+    console.log(getModels());
+    for (let m in getModels()) s.createChild("option", {content: m, value: m});
+    this.modelSelect = s;
+
+
+    this.loadCookies();
+  }
+  
+  loadCookies(){
+    let params = localStorage.getItem("calibration-params");
+    if (params) {
+      try{
+        this.value = JSON.parse(params);
+      }catch(e){}
+    }
+  }
+  saveCookies(){
+    localStorage.setItem("calibration-params", JSON.stringify(this.value))
+  }
+
+
+  set value(value){
+    let {inputs} = this;
+    for (let key1 in inputs) {
+      if (key1 in value) {
+        for (let key2 in inputs[key1]) {
+          if (key2 in value[key1]) {
+            inputs[key1][key2].set(value[key1][key2])
+          }
         }
       }
     }
-    this.inputs = inputs
-    // this.createChild("div", {class: "close", content: "X"});
+
+    if ("model" in value) this.modelSelect.value = value.model;
   }
 
   get value(){
@@ -60,179 +85,201 @@ class CalibrationParams extends SvgPlus {
     for (let key in inputs) {
       value[key] = {}
       for (let key2 in inputs[key]) {
-        value[key][key2] = inputs[key][key2]()
+        value[key][key2] = inputs[key][key2].get()
       }
     }
+    value.model = this.modelSelect.value;
     return value;
   }
 }
 
+/**
+ * @typedef {[Number, Vector, URL, String]} DataPoint
+ * @type {DataPoint[]}
+ */
+let images = [];
 
 
-class SvgGrid extends SvgResize {
-  draw(){
-    let s = 3;
-    let {W, H} = this;
-    if (this.lastW != W || this.lastH != H) {
-      this.innerHTML = "";
-      this.lastW = W;
-      this.lastH = H;
-      let grid = dotGrid(7, new Vector(s), new Vector(W-s, s), new Vector(s, H-s), new Vector(W-s, H-s));
-      for (let p of grid) {
-        this.createChild("circle", {cx: p.x, cy: p.y, r: s})
-      }
-    }
-  }
-}
-
-class EyesFeedbackFrame extends HideShow{
-  constructor(el = "eyes-feedback"){
-    super(el);
-    this.size = 1;
+class StartWindow extends HideShow {
+  constructor(){
+    super("div");
     this.styles = {
-      overflow: "hidden",
-      "border-radius": "1em",
+      position: "absolute",
+      top: "2em",
+      left: "50%",
+      transform: "translate(-50%, 0)"
     };
-    // Eye box
-    this.eyebox = this.createChild("div", {styles: {overflow: "hidden", display: "flex", position: "relative"}});
-    this.eye2 = this.eyebox.createChild("canvas", {styles: {width: "50%"}});
-    this.eye1 = this.eyebox.createChild("canvas", {styles: {width: "50%"}});
 
-      // FeedbackFrame
-    this.fb = this.createChild(FeedbackFrame);
-    Webcam.addPredictionListener((input) => this.renderFace(input));
-
-  }
-
-  set size(size){
-    this._size = size;
-    this.styles = {
-      width: `${size * 100}vmin`
-    }
-  }
-  get size(){
-    return this._size;
-  }
-
-  hideEyes(){
-    this.showEyes(false);
-  }
-  showEyes(show = true){
-    if (show && !!this.eyes_hidden) {
-      this.eyebox.styles = {height: "auto"}
-      this.eyes_hidden = false;
-    } else if (!show && !this.eyes_hidden) {
-      this.eyebox.styles = {height: "0px"}
-      this.eyes_hidden = true;
-    }
-  }
-
-  ondblclick(){
-    console.log(this.eyes_hidden);
-    this.showEyes(!!this.eyes_hidden)
-  }
-
-  renderFace(input) {
-    this.fb.updateCanvas(input.canvas);
-
-    this.styles = {
-      border: !!input.error ? "2px solid red" : "none",
-      padding: !!input.error ? "0px" : "2px"
-    }
-    try {
-      let eyefeatures = decode(input.prediction);
-      renderBoxSection(eyefeatures.left.pixels, this.eye1);
-      renderBoxSection(eyefeatures.right.pixels, this.eye2);
-      let svg = this.fb.svg;
-      for (let key in input.points.eyeboxes) {
-        let ps = input.points.eyeboxes[key];
-        svg.createChild("path", {
-          d: `M${ps[0]}L${ps[1]}L${ps[2]}L${ps[3]}Z`,
-          fill: "#00ff0044"
-        })
-      }
-    } catch(e){}
-  }
-}
-
-let COLORS = ["blue", "red", "purple", "orange"];
-class Pointers extends SvgPlus {
-  constructor(el = "div"){
-    super(el)
-    this.pi = 0;
-    this.pointers = {};
-    this.bounds = this.createChild("div", {styles: {
-      position: "fixed",
-      width: "10px",
-      height: "10px",
-      "border-radius": "10px",
-      transform: "translate(-50%, -50%)",
-      border: "2px solid #0005",
-    }});
-  }
-
-  set(name, vec) {
-    let abs = null;
-    let {pointers} = this;
-    if (name in pointers) {
-      let style = {display: "none"}
-      if (vec instanceof Vector) {
-        abs = vec.mul(new Vector(window.innerWidth, window.innerHeight));
-        style = {
-          display: "block",
-          top: abs.y + 'px',
-          left: abs.x + 'px',
+    this.message = this.createChild("div");
+    this.button = this.createChild("div", {
+      class: "btn",
+      content: "Start Webcam",
+      events: {
+        click: () => {
+          this.dispatchEvent(new Event("click"));
         }
       }
-      pointers[name].styles = style;
-      pointers[name].pos = abs;
+    })
+    this.button.shown = true;
+    this.state = "start"
+  }
+
+  /** @param {boolean} val */
+  set disabled(val){
+    this.button.disabled = val;
+  }
+
+  async _fadeTo(button, message, disabled = false){
+    let shown = this.shown;
+    if (shown) {await this.hide();}
+    this.button.innerHTML = button;
+    this.message.innerHTML = message;
+    this.disabled = disabled;
+    if (shown) await this.show();
+  }
+
+  /** @param {String} state */
+  async setState(state) {
+    if (this.state != state) {
+      this._state = state;
+      switch (state) {
+        case "start":
+          await this._fadeTo("Start Webcam", "")
+          break;
+        case "webcam-error":
+          await this._fadeTo("Start Webcam", "You browser does not support webcam accesability, or the webcam is currently being used.<br/><br/>Click to try again.")
+          break;
+        case "calibrate":
+          await this._fadeTo("Calibrate", "")
+          break;
+      }
     }
   }
 
-  updateBounds(){
-    let {pointers} = this;
-    let mid = new Vector(0);
-    let n = 0;
-    for (let name in pointers) {
-      if (pointers[name].pos instanceof Vector) {
-        mid = mid.add(pointers[name].pos);
-        n++;
-      }
-    }
-    if (n > 0) mid = mid.div(n);
-
-    let r = 0;
-    for (let name in pointers) {
-      if (pointers[name].pos instanceof Vector) {
-        let rd = mid.dist(pointers[name].pos)
-        if (rd > r) r = rd;
-      }
-    }
-    let style = {display: "none"}
-    if (r > 0) {
-      style = {
-        display: "block",
-        top: mid.y + 'px',
-        left: mid.x + 'px',
-        width: 2*r + 'px',
-        height: 2*r + 'px',
-        "border-radius": r + 'px'
-      }
-    }
-    this.bounds.styles = style;
+  /** @param {String} state */
+  set state(state){
+    this.setState(state);
   }
 
-  add(name, color = COLORS[this.pi], size = 10) {
-    this.pi ++;
-    this.pointers[name] = this.createChild("div", {styles: {
-      position: "fixed",
-      width: size + "px",
-      height: size + "px",
-      "border-radius": "10px",
+  /** @return {String} */
+  get state(){
+    return this._state;
+  }
+}
+
+class ResultsWindow extends HideShow {
+  constructor(){
+    super("div");
+    this.styles = {
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)"
+    }
+
+    this.image = this.createChild("img", {styles: {"border-radius": "1em"}});
+    this.buttons = this.createChild(HideShow, {styles: {
+      position: "absolute",
+      top: "50%",
+      left: "50%",
       transform: "translate(-50%, -50%)",
-      background: color,
-      display: "none",
     }});
+
+    let rel = this.buttons.createChild("div", {styles: {
+      display: "flex",
+      fill: "white",
+      "font-size": "3em",
+      gap: `0.3em`,
+      background: "#0006",
+      "border-radius": "0.3em",
+      padding: "0.3em",
+    }})
+    rel.createChild("div", {
+      style: {
+        cursor: "pointer", display: "flex"
+      },
+      events: {
+        click: () => this.dispatchEvent(new Event("play"))
+      },
+      content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 384 512"><<path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>`
+    })
+    rel.createChild("div", {
+      style: {
+        cursor: "pointer", display: "flex"
+      }, 
+      events: {
+        click: () => this.dispatchEvent(new Event("save"))
+      },
+      content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 448 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32H288c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></svg>`
+    })
+    rel.createChild("div", {
+      style: {
+        cursor: "pointer", display: "flex"
+      }, 
+      events: {
+        click: () => this.dispatchEvent(new Event("close"))
+      },
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+      <svg id="Layer_1" width = "1em" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6.02 6.02">
+        <defs>
+          <style>
+            .cls-1 {
+              fill: #fff;
+              stroke-width: 0px;
+            }
+          </style>
+        </defs>
+        <path class="cls-1" d="m3.72,3.01L5.88.85c.2-.2.2-.51,0-.71s-.51-.2-.71,0l-2.16,2.16L.85.15C.66-.05.34-.05.15.15S-.05.66.15.85l2.16,2.16L.15,5.17c-.2.2-.2.51,0,.71.1.1.23.15.35.15s.26-.05.35-.15l2.16-2.16,2.16,2.16c.1.1.23.15.35.15s.26-.05.35-.15c.2-.2.2-.51,0-.71l-2.16-2.16Z"/>
+      </svg>`
+    })
+  }
+
+  /**
+   * @callback onDataPoint
+   * @param {DataPoint}
+   */
+
+  /** 
+   * @param {DataPoint[]} data
+   * @param {onDataPoint} callback
+   * @param {boolean} realTime
+   */
+  async animate(data, callback, realTime) {
+    if (this._animating) return;
+    this._animating = true;
+    this._stop = false;
+      
+    if (!this.shown) {
+      this.buttons.shown = false;
+      await this.show();
+    } else {
+      this.buttons.hide();
+    }
+    
+    let lastTime = null
+    for (let dp of data) {
+      let time = dp[0];
+      if (lastTime == null) lastTime = time;
+      this.src = dp[2]
+      if (callback instanceof Function) callback(dp);
+      await delay(realTime ? time-lastTime : undefined);
+      lastTime = time;
+      if (this._stop) break;
+    }
+    await this.buttons.show();
+    this._animating = false;
+  }
+
+
+  stop(){
+    this._stop = true;
+  }
+
+  /**
+   * @param {URL} src
+   */
+  set src(src) {
+    this.image.props = {src: src};
   }
 }
 
@@ -249,228 +296,193 @@ class EyeApp extends SvgPlus {
       left: 0,
       right: 0,
       bottom: 0,
-    };
+    };  
+
+    /** @type {ResultsWindow} */
+    this.results = this.createChild(ResultsWindow, {
+      events: {
+        play: () => this.playRecording(),
+        save: () => this.saveRecording(),
+        close: () => this.closeResults(),
+      }
+    });
 
 
-    let grid = this.createChild(SvgGrid);
-    grid.styles = {
-      width: `calc(100% - 2em)`,
-      height: `calc(100% - 2em)`,
-      margin: '1em',
-      opacity: 0.3
-    };
-    grid.start();
+    /** @type {SvgResize} */
+    let svgBackground = this.createChild(SvgResize, {
+      width: `100%`,
+      height: `100%`,
+    });
+    svgBackground.createGrid(7)
+    svgBackground.start();
+    svgBackground.show()
 
-    this.start_window = this.createChild(HideShow);
-    this.start_message = this.start_window.createChild("div");
-    this.start_window.styles = {
-      position: "fixed",
-      top: "2em",
-      left: "50%",
-      transform: "translate(-50%, 0)"
-    };
 
-    this.start_button = this.start_window.createChild(HideShow);
-    this.start_button.props = {
-      class: "btn",
-      content: "Start Webcam",
-    }
-    this.start_button.onclick = () => {this.startWebcam();}
-    this.start_button.shown = true;
-
-    this.calibrate_button = this.start_window.createChild(HideShow);
-    this.calibrate_button.props = {
-      content: "Calibrate",
-      class: "btn",
-    }
-    this.calibrate_button.onclick = () => {this.calibrate();}
-
-    this.start_window.show(1000)
-    // this.start_window.show(400);// = true;
-
-    this.feedback = this.createChild(EyesFeedbackFrame);
-    this.feedback.styles = {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)"
-    }
-    this.feedback.hideEyes();
-    this.feedback.size = 0.5;
-    //
-    this.results = this.createChild(HideShow);
-    this.results.styles = {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)"
-    }
-    this.rimage = this.results.createChild("img", {styles: {"border-radius": "1em"}});
-    this.resultButtons = this.results.createChild(HideShow);
-    this.resultButtons.styles = {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)",
-     
-    }
-    let rel = this.resultButtons.createChild("div", {styles: {
-      display: "flex",
-      fill: "white",
-      "font-size": "3em",
-      gap: `0.3em`,
-      background: "#0006",
-      "border-radius": "0.3em",
-      padding: "0.3em",
-    }})
-    let play = rel.createChild("div", {style: {cursor: "pointer", display: "flex"}, content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 384 512"><<path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>`})
-    let save = rel.createChild("div", {style: {cursor: "pointer", display: "flex"}, content: `<svg xmlns="http://www.w3.org/2000/svg" width = "1em" viewBox="0 0 448 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32H288c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></svg>`})
-    play.onclick = () => this.playRecording();
-    save.onclick = () => this.saveRecording();
-
-    let pointers = this.createChild(Pointers);
-    pointers.add("p1");
-    pointers.add("p2");
-    this.pointers = pointers;
-
-    this.params = this.createChild(CalibrationParams);
+    await EyeGaze.load()
    
+
+    /** @type {StartWindow} */
+    this.start_window = this.createChild(StartWindow, {
+      events: {
+        click: () => {
+          switch (this.start_window.state) {
+            case "start":
+            case "webcam-error":
+              this.startWebcam();
+              break;
+            case "calibrate":
+              this.calibrate();
+              break;
+          }
+        }
+      }
+    })
+    this.start_window.show();
+
+
+    /** @type {FeedbackFrame} */
+    this.feedback = this.createChild(FeedbackFrame, {styles: {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)"
+    }});
+    this.feedback.size = 0.5;
+
+
+    /** @type {SvgResize} */
+    let pointers = this.createChild(SvgResize, {styles: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      heigth: "100%",
+      "user-select": "none",
+      "pointer-events": "none"
+    }})
+    this.ghost = pointers.createPointer("relative");
+    this.blob = pointers.createPointer("blob", 15, 10);
+    pointers.start();
+    pointers.show();
+
+
+    /** @type {CalibrationParams} */
+    this.params = this.createChild(CalibrationParams);
+    
+   
+    /** @type {CalibrationFrame} */
     this.calibrator = this.createChild(CalibrationFrame);
-    Webcam.addPredictionListener((input) => this.onPrediction(input));
+
+
+    Webcam.addProcessListener((input) => this.onPrediction(input));
+
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key == "s") {
+        this.results.stop();
+      } else if (e.key == "p") {
+        this.params.toggleAttribute("shown");
+      }
+    })
   }
 
   async saveRecording(){
     if (!this._saving) {
       this._saving = true;
-      this.resultButtons.disabled = true;
+      this.results.buttons.disabled = true;
+
+      // zip all data points together with file name $timesampe_$position_$calibration-type.jpeg
       const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
       await Promise.all(
         images.map(([ts, pos, img, ctype]) => zipWriter.add(`${ts}_(${pos})_${ctype}.jpeg`, new zip.Data64URIReader(img)) )
       );
+
+      // create blob from zip and download it
       let blob = await zipWriter.close();
-      console.log(blob);
       let a = this.createChild("a", {
         download: "eyedata_" + (new Date()).getTime() + ".zip",
         href: URL.createObjectURL(blob),
         textContent: "Download zip file",
       })
       a.click();
-      this.resultButtons.disabled =false;
+
+      this.results.buttons.disabled =false;
       this._saving = false;
     }
   }
 
   async startWebcam(){
+    if (this._starting) return;
+    this._starting = true;
+
+    // start the web cam
     console.log("starting webcam");
-    this.start_button.disabled = true;
+    this.start_window.disabled = true;
     let webcam_on = await Webcam.startWebcam();
     console.log("webcam " + (webcam_on ? "started" : "failed to start"));
+    
+    // webcam started so display the calibration button and feedback
     if (webcam_on) {
-      Webcam.startPredictions();
-      this.start_message.innerHTML = "";
-      await parallel(this.start_button.hide(), this.feedback.show());
-      this.start_button.disabled = false;
-      await this.calibrate_button.show();
+      Webcam.startProcessing();
+      await parallel(this.start_window.setState("calibrate"), this.feedback.show());
+    
+    // webcam failed show the webcam error message
     } else {
-      this.start_message.innerHTML = "You browser does not support webcam accesability, or the webcam is currently being used.<br/><br/>Click to try again."
-      this.start_button.disabled = false;
+      if (this.start_window.state == "webcam-error")
+        this.start_window.disabled = false;
+      else 
+        this.start_window.state = "webcam-error";
     }
+    this._starting = false;
   }
 
-
-
   async playRecording(){
-    console.log(images);
-    if (!this._playing) {
-      this._playing = true;
-      await this.results.show()
-      await this.resultButtons.hide();
-      let lastTime = null
-      for (let [time, point, image] of images) {
-        if (lastTime == null) lastTime = time;
-        this.rimage.props = {src: image};
-        this.pointers.set("p1", point);
-        await delay(time - lastTime);
-        lastTime = time;
-      }
-      this.resultButtons.show();
-      this._playing = false;
-    }
+    await parallel(this.ghost.show(), this.blob.show());
+    // animate results
+    await this.results.animate(images, (dataPoint) => {
+      // for each data point show where the calibration dot was
+      this.ghost.position = dataPoint[1];
+    })
+    await parallel(this.ghost.hide(), this.blob.show());
   }
 
   async calibrate(){
+    if (this._calibrating) return;
+    this._calibrating = true;
     images = [];
-
-    await this.calibrator.show();
-    this.feedback.styles = {transform: "none", top: "1em", left:"1em"};
-    this.feedback.size = 0.2;
-
-    await this.calibrator.calibrate(this.params.value);
-   
-
+    await parallel(this.calibrator.show(), this.feedback.hide());
+    this.params.saveCookies();
+    let params = this.params.value;
+    EyeGaze.selectModel(params.model);
+    await this.calibrator.calibrate(params);
     await this.calibrator.hide();
     await this.playRecording();
+    this._calibrating = false;
+  }
 
-
-   
+  async closeResults(){
+    await parallel(this.results.hide(),
+    this.feedback.show());
   }
 
   onPrediction(input){
-    // console.log(input.canvas.getDataURL("image/ong"));
-    // if (this.calibrate_button.shown) {
-    //   this.calibrate_button.disabled = !!input.error;
-    // }
-    // let y1 = null;
-    // let y2 = null;
+    // push data point if recording
     if (this.calibrator.recording || this.capture) {
       images.push([(new Date()).getTime(), this.calibrator.position, input.canvas.toDataURL("image/jpeg"), this.calibrator.ctype]);
     }
 
-    // if (!input.error) {
-    //   let x1 = input.feature;
-    //   let x2 = input.info.feat2;
-    //   if (this.calibrator.recording) {
-    //     train_data.push([x1, this.calibrator.position, x2]);
-    //   }
+    if (input.result) {
+      let p = input.result;
+      if (p.x > 1) p.x = 1;
+      if (p.x < 0) p.x = 0;
 
-    //   if (this.m1) {
-    //     y1 = this.m1.predict(x1);
-    //     x2 = [...x2, y1.x, y1.y];
-    //     if (this.calibrator.recording) {
-    //       train_data2.push([x2, this.calibrator.position]);
-    //     }
-
-    //     if (this.m2) {
-    //       y2 = this.m2.predict(x2);
-    //     }
-    //   }
-    // }
-
-    // this.pointers.set("p1", y1);
-    // this.pointers.set("p2", y2);
+      if (p.y > 1) p.y = 1;
+      if (p.y < 0) p.y = 0;
+      let r = this.blob.fromRelative(p);
+      this.blob.position = r;
+    }
   }
 }
 
-// let train_data = [];
-let images = [];
-// let train_data2 = [];
-
-Webcam.setPredictor((input) => {
-  let lastFeatures = null;
-  try {
-    // let points = FaceMesh.getFacePointsFromVideo(input.video);
-    // if (!("left" in points)) throw 'No face detected'
-    // input.points = points;
-    // lastFeatures = extractEyeFeatures(points, input.canvas);
-    // let x = decode(lastFeatures);
-    // input.info = x;
-    // input.feature = x.feat;
-  } catch (e) {
-    // lastFeatures = null;
-    // console.log("prediction error:", e);
-    // throw e;
-  }
-  return lastFeatures;
-})
 
 SvgPlus.defineHTMLElement(EyeApp)

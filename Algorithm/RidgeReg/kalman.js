@@ -53,7 +53,7 @@ class KalmanFilter {
       return transpose(mult(this.H, this.X))[0]; //Transforms the predicted state back into it's measurement form
   };
 
-  static default(xmax = 500, xmin = 0, delta_t = 1/20, pixel_error = 47){
+  static default(xmax = 0.500, xmin = 0, delta_t = 1/20, pixel_error = 47){
     // Initialize Kalman filter [20200608 xk] what do we do about parameters?
     // [20200611 xk] unsure what to do w.r.t. dimensionality of these matrices. So far at least
     //               by my own anecdotal observation a 4x1 x vector seems to work alright

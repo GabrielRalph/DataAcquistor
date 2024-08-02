@@ -1,19 +1,20 @@
 import numeric from './numeric.js';
 import mat from './mat.js';
-import KalmanFilter from "./kalman.js";
+import {Vector} from "../../../../SvgPlus/4.js"
 
-/**
- * Performs ridge regression, according to the Weka code.
- * @param {Array} y - corresponds to screen coordinates (either x or y) for each of n click events
- * @param {Array.<Array.<Number>>} X - corresponds to gray pixel features (120 pixels for both eyes) for each of n clicks
- * @param {Array} k - ridge parameter
- * @return{Array} regression coefficients
+/** Performs ridge regression, according to the Weka code.
+ * @param {[Number]} y  size n array
+ * @param {[[Number]]} X  size n x m array's
+ * @param {Number} k ridge parameter
+ * @return{[Number]} regression coefficients size m array
  */
 function ridgereg(y, X, k){
+  
     var nc = X[0].length;
     var m_Coefficients = new Array(nc);
     var xt = mat.transpose(X);
     var solution = new Array();
+    let epocs = 0;
     var success = true;
     do{
         var ss = mat.mult(xt,X);
@@ -44,10 +45,39 @@ function ridgereg(y, X, k){
             console.log(ex);
             success = false;
         }
+        epocs ++;
     } while (!success);
+    console.log(epocs);
     return m_Coefficients;
 }
 
+/** Performs ridge regressions given y as a vector's
+  * @param {[(X: [Number], y: Vector)]} data regression data
+  * @param {Number} k ridge parameter
+  * @return {(predict: Function, mx: [number], my: [number])}
+*/
+function ridgeregvec(data, k = Math.pow(10, -5)){
+  let X = data.map(u => u.X)
+  let mx = ridgereg(data.map(u => [u.y.x]), X, k);
+  let my = ridgereg(data.map(u => [u.y.y]), X, k);
+
+  return {
+    mx: mx,
+    my: my,
+    /** regression predictor
+      * @param {[Number]} X
+      * @return {Vector}
+    */
+    predict: (X) => {
+      let v = new Vector(0)
+      for (let i = 0; i < X.length; i++) {
+        v.x += X[i] * mx[i];
+        v.y += X[i] * my[i];
+      }
+      return v;
+    }
+  }
+}
 
 
-export {ridgereg, KalmanFilter};
+export {ridgereg, ridgeregvec};

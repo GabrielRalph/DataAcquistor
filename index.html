@@ -48,7 +48,14 @@
       color: white;
       background: rgb(44, 43, 43);
       border-radius: 2em;
+      transition: 0.3s ease-in-out;
     }
+
+    .calibration-params:not([shown]) {
+      transform: translateX(calc(-100% - 1em));
+    }
+
+
     .rel {
       position: relative;
       gap: 0.5em;

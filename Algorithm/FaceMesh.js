@@ -2,12 +2,49 @@ import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0"
 import {Vector, Vector3} from "../Utilities/vector3.js"
 const {FaceLandmarker, FilesetResolver} = vision;
 
+
+/**
+ * @typedef {Vector & {v3d: Vector3}} Vector2and3
+ */
+
+/**
+ * @typedef EyePoints 
+ * @type {object}
+ * @property {Vector2and3} left
+ * @property {Vector2and3} right
+ * @property {Vector2and3} top
+ * @property {Vector2and3} bottom
+ * @property {Vector2and3[]} border
+ * @property {Vector2and3[]} pupil
+ * @property {Vector2and3[]} iris
+ * @property {Vector2and3[]} all
+ */
+
+/**
+ * @typedef FacePoints
+ * @type {object}
+ * @property {EyePoints} righteye
+ * @property {EyePoints} lefteye
+ * @property {Vector2and3[]} all
+ * @property {Vector3[]} allNoScale
+ * @property {Vector2and3} leftMost
+ * @property {Vector2and3} rightMost
+ * @property {Vector2and3[]} plane
+ * @property {Number} width
+ * @property {Number} width
+ * @property {Vector} size
+ * @property {Vector3} size3d
+ * 
+ */
+
+
 let runningMode = "VIDEO";
 
-const facepointidxs = {
+
+const FacePointIdxs = {
   leftMost: 226,
   rightMost: 446,
-  right: {
+  righteye: {
     left: 130,
     right: 173,
     top: 159,
@@ -17,7 +54,7 @@ const facepointidxs = {
     iris: [469, 470, 471, 472],
     all: [112, 26, 22, 23, 24, 110, 25, 33, 246, 161, 160, 159, 158, 157, 173, 243, 469, 470, 471, 472, 468]
   },
-  left: {
+  lefteye: {
     top: 386,
     bottom: 374,
     left: 398,
@@ -27,8 +64,16 @@ const facepointidxs = {
     iris: [474, 475, 476, 477],
     all: [463, 398, 384, 385, 386, 387, 388, 466, 263, 255, 339, 254, 253, 252, 256, 341, 474, 475, 476, 477, 473]
   },
-  plane: [168, 112, 26, 22, 23, 24, 110, 25, 33, 246, 161, 160, 159, 158, 157, 173, 243, 205, 425, 200, 463, 398, 384, 385, 386, 387, 388, 466, 263, 255, 339, 254, 253, 252, 256, 341]
+  plane: [4, 243, 463],
 }
+
+
+// Gets face landmark points as 2D and 3D vectors (3D vectors stored in 2D vectors
+// under the key "v3d") scaled to the dimension of the webcamera. Object returned
+// as per FacePointIdxs with indicies replaced with the points predicted.
+/**
+ * @return {FacePoints}
+ */
 function getFacePoints(prediction, width, height) {
   let data = null;
   try{
@@ -39,14 +84,19 @@ function getFacePoints(prediction, width, height) {
     // ~~~ scaling in 3d ~~~~~
     let s3d = new Vector3(size.x,size.y,width);
 
+    // convert all points vector objects
     let vecs = points.map((v) => {
       let v2d = new Vector(v);
       v2d = v2d.mul(size);
+
+      // 3D vectors stored in 2D vector under key v3d
       v2d.v3d = (new Vector3(v.x, v.y, v.z)).mul(s3d);
       return v2d;
     });
+
     data.width = width;
     data.height = height;
+    data.allNoScale = points.map((v) => new Vector3(v.x, v.y, v.z));
     data.all = vecs;
     data.size = size;
     data.size3d = s3d;
@@ -74,13 +124,15 @@ function getFacePoints(prediction, width, height) {
         }
       }
     }
-    recset(facepointidxs, data)
+    recset(FacePointIdxs, data)
   } catch(e){}
   return data;
 }
 
-let FaceMesh;
-async function load() {
+let FaceMesh = false;
+// Load's model
+export async function load() {
+  if (FaceMesh !== false) return;
   // Read more `CopyWebpackPlugin`, copy wasm set from "https://cdn.skypack.dev/node_modules" to `/wasm`
   const filesetResolver = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
@@ -95,8 +147,13 @@ async function load() {
     numFaces: 1
   });
 }
-await load();
+// await load();
 
+/** Get face points from video
+ * @param {HTMLVideoElement} video
+ * 
+ * @return {FacePoints} 
+ */ 
 export function getFacePointsFromVideo(video) {
   let ts = Date.now();
   let res = FaceMesh.detectForVideo(video, ts);

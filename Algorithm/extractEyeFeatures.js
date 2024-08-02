@@ -1,13 +1,9 @@
 import {Vector3, Vector} from "../Utilities/vector3.js"
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Default Parameters ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
 const WIDTH = 20;
-const HEIGHT = 13;
-
-
-// console.log(2*(WIDTH*HEIGHT + 4*3*3));
-
-const W2H = HEIGHT/WIDTH;
-const H2T = 0.5;
+const HEIGHT = 10;
+const H2T = 0.5;         // Represents the ratio of the height of the eye to the center
 const BLINKRATIO = 0.17; // If the distance from the top of the eye to the bottom (height)
                          // is less than the width of the eye times the blink ratio
                          // the feature extraction will fail
@@ -15,10 +11,180 @@ const MINSIZERATIO = 0.9 // If the width of the eye is less than the min size ra
                          // times the fixed width and height feature extraction
                          // will fail
 
+
+
+/**
+ * @typedef EyeBox
+ * @type {object}
+ * @property {Vector} bottomLeft 
+ * @property {Vector} bottomRight 
+ * @property {Vector} topLeft 
+ * @property {Vector} topRight 
+ * @property {Vector} eyeTop 
+ * @property {Vector} eyeBottom 
+ * @property {?String} warning 
+ */
+
+/**
+ * @typedef EyePixelsBase
+ * @type {Object}
+ * @property {Number} width
+ * @property {Number} height
+ * @property {(canvas: HTMLCanvasElement) => void} render
+ * 
+ * @typedef {EyePixelsBase & Array} EyePixels
+ */
+
+/**
+ * @typedef EyeFeatures
+ * @type {object}
+ * @property {EyeBox} box 
+ * @property {EyePixels} pixels 
+ */
+
+
+/**
+ * @typedef Features
+ * @type {object} 
+ * @property {import("./FaceMesh.js").FacePoints} facePoints
+ * @property {EyeFeatures} left
+ * @property {EyeFeatures} right
+ * @property {{offset: import("./FaceMesh.js").Vector2and3, direction: Vector3}} transform
+ * @property {Number} videoWidth
+ * @property {Number} videoHeight
+ * @property {() => String} serialise
+ */
+
+
+
+function getFaceTransform(facePoints){
+  let [a, b, c] = facePoints.plane;
+
+  let ab = b.v3d.sub(a.v3d);
+  let ac = c.v3d.sub(a.v3d);
+
+  let n = ab.cross(ac);
+  n = n.div(n.norm());
+
+
+  return {offset: a, direction: n};
+}
+
+
+
+/** Extract Eye Features, given the eye points object determines a 3D bounding box
+    and extracts pixel information from the provided canvas.
+ * @param {FacePoints} eyePoints (see FacePointIdxs in FaceMesh.js)
+ * @param {HTMLCanvasElement} canvas
+ * @param {Number} w Width of eye box in pixels (defaults to WIDTH)
+ * @param {Number} w Height of eye box in pixels (defaults to HEIGHT)
+ * 
+ * @returns {Features} (See below for definition)
+*/
+export function extractEyeFeatures(facePoints, canvas, w = WIDTH, h = HEIGHT) {
+  let errors = [];
+  let width = canvas.width;
+  let height = canvas.height;
+  let features = {videoHeight: height, videoWidth: width};
+ try {
+  features.transform = getFaceTransform(facePoints);
+   for (let key of ["left", "right"]) {
+     let eyeBox = {warning: "not detected"};
+     let eyePixels = null;
+     let pkey = key + "eye";
+
+     if (pkey in facePoints) {
+      let eyepoints = facePoints[pkey];
+       eyepoints.width = width;
+       eyepoints.height = height;
+       eyeBox = getEyeBoundingBox(eyepoints, h/w, w * MINSIZERATIO);
+       eyePixels = extractEyeBoxPixels(eyeBox, canvas, w, h);
+       eyePixels = equalizeHistogram(eyePixels, 5);
+       eyePixels = im2double(eyePixels);
+     }
+
+
+     features[key] = {
+       box: eyeBox,
+       pixels: eyePixels
+     }
+
+     if (eyeBox.warning) errors.push(`The ${key} eye is ${eyeBox.warning}`);
+   }
+   if (errors.length != 0) features.warning = errors.join(", ");
+ } catch (e) {
+   console.log(e);
+   features.errors = e;
+ }
+ features.facePoints = facePoints;
+ features.serialise = () => serialiseFeatures(features);
+
+ return features;
+}
+
+export function deserialiseFeatures(json) {
+  json = JSON.parse(json);
+  let wp = json.wp;
+  let hp = json.hp;
+  
+  let features = {
+    left: {
+      box: deserialiseBox(json.left.box),
+      pixels: deserialisePixels(json.left.pixels, wp, hp)
+    },
+    right: {
+      box: deserialiseBox(json.right.box),
+      pixels: deserialisePixels(json.right.pixels, wp, hp)
+    },
+    videoHeight: json.h,
+    videoWidth: json.w
+  }
+
+  let warnings = ["left", "right"].map((x) => {
+    return features[x].box.warning == null ? "" : `The ${x} eye is ${features[x].box.warning}`
+  }).filter(x => x!= "").join(",");
+  if (warnings != "") features.warning = warnings;
+  return features;
+}
+
+export function serialiseFeatures(features) {
+  let {left, right} = features;
+  let wp = null;
+  let hp = null;
+  if (left.pixels != null) {
+    wp = left.pixels.width;
+    hp = left.pixels.height;
+  } else if (right.pixels != null) {
+    wp = right.pixels.width;
+    hp = right.pixels.height;
+  }
+
+  let json = {
+    hp: hp,
+    wp: wp,
+    h: features.videoHeight,
+    w: features.videoWidth,
+    left: {
+      box: serialiseBox(left.box),
+      pixels: serialisePixels(left.pixels)
+    },
+    right: {
+      box: serialiseBox(right.box),
+      pixels: serialisePixels(right.pixels)
+    }
+  }
+
+  return JSON.stringify(json)
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Helper Functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Pre Processing ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
 let CA = document.createElement("canvas");
 let CTX = CA.getContext("2d", {willReadFrequently: true});
 
-function grayscale(pixels, width, height){
+function grayscale(pixels){
+  let {width, height} = pixels;
+  pixels = pixels.data;
   var gray = new Uint8ClampedArray(pixels.length >> 2);
   var p = 0;
   var w = 0;
@@ -30,6 +196,9 @@ function grayscale(pixels, width, height){
       w += 4;
     }
   }
+  gray.width = width;
+  gray.height = height;
+  gray.render = (canvas) => renderGray(gray, canvas, 1);
   return gray;
 };
 
@@ -61,58 +230,71 @@ function equalizeHistogram (src, step = 5) {
   return dst;
 };
 
-export function renderBoxSection(gray, canvas) {
+function im2double(utf8){
+ let norms = [];
+ for (let val of utf8) {
+   norms.push(val/255);
+ }
+ norms.width = utf8.width;
+ norms.height = utf8.height;
+ norms.render = (canvas) => renderGray(norms, canvas, 255);
+ return norms;
+}
+
+export function renderGray(gray, canvas, mult) {
   if (typeof gray === "string") gray = decodeUTF8(gray);
   let ctx = canvas.getContext('2d');
-  let [w, h] = [WIDTH, HEIGHT];
+  let [w, h] = [gray.width, gray.height];
   canvas.width = w;
   canvas.height = h;
   let data = new Uint8ClampedArray(gray.length * 4);
 
   for (let i = 0; i < gray.length; i++) {
-    data[i*4] = gray[i];
-    data[i*4 + 1] = gray[i];
-    data[i*4 + 2] = gray[i];
+    data[i*4] = gray[i] * mult;
+    data[i*4 + 1] = gray[i] * mult;
+    data[i*4 + 2] = gray[i] * mult;
     data[i*4 + 3] = 255;
   }
 
   ctx.putImageData(new ImageData(data, w, h), 0, 0);
 }
 
-function extractBoxSection(tl, bl, br, tr, canvas) {
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Eye Box Extraction ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+function extractEyeBoxPixels(eyeBox, canvas, w = WIDTH, h = HEIGHT) {
   CA.height = canvas.height;
   CA.width = canvas.width;
-  let lr = tr.sub(tl);
+  let {topLeft, topRight, bottomLeft} = eyeBox;
+  let lr = topRight.sub(topLeft);
   let angle = Math.atan(Math.abs(lr.y)/Math.abs(lr.x));
   if (lr.y > 0) angle *= -1;
 
-  let w = WIDTH;
-  let h = HEIGHT;
-
   let ws = w/lr.norm();
-  let hs = h/tl.dist(bl);
+  let hs = h/topLeft.dist(bottomLeft);
   CTX.resetTransform();
   CTX.scale(ws, hs);
   CTX.rotate(angle);
-  CTX.translate(-tl.x, -tl.y);
+  CTX.translate(-topLeft.x, -topLeft.y);
   CTX.drawImage(canvas, 0, 0);
   CTX.save();
   let data = CTX.getImageData(0, 0, w, h);
-  let gray = grayscale(data.data, w, h);
-  // equalizeHistogram(gray, 5);
+
+  let gray = grayscale(data, w, h);
   return gray;
 }
 
-function getEyeBoxPoints(l, r, t, b){
-  let lr = r.v3d.sub(l.v3d);
-  let tb = b.v3d.sub(t.v3d);
+// Given the points on the top, bottom, left and right of the eye find the cor
+function getEyeBoundingBox(eyePoints, w2h, minW, h2t = H2T){
+  let {left, right, top, bottom} = eyePoints
+  let warning = null;
+  let lr = right.v3d.sub(left.v3d);
+  let tb = bottom.v3d.sub(top.v3d);
 
   let w = lr.norm();
-  let h = w * W2H
+  let h = w * w2h;
   let tbn = tb.norm();
 
-  if (tbn < w * BLINKRATIO) throw 'blinking'
-  if (w < WIDTH * MINSIZERATIO) throw 'to small'
+  if (tbn < w * BLINKRATIO) warning = 'blinking'
+  if (w < minW) warning = 'to small'
 
   // Transform lr and tb by the y angle and z angle of lr
   // such that lr runs only along the x axis
@@ -130,116 +312,85 @@ function getEyeBoxPoints(l, r, t, b){
 
   // transform tb back
   let tbr = tb_.rotateZ(az).rotateY(-ay);
-  let up = tbr.dir().mul(h * H2T);
-  let down = tbr.dir().mul(h - h*H2T);
+  let up = tbr.dir().mul(h * h2t);
+  let down = tbr.dir().mul(h - h*h2t);
 
   // return 2d vectors with stored 3d vectors
-  let x13 = l.v3d.sub(up);
+  let x13 = left.v3d.sub(up);
   let x1 = new Vector(x13);
   x1.v3d = x13;
 
-  let x23 = l.v3d.add(down);
+  let x23 = left.v3d.add(down);
   let x2 = new Vector(x23);
   x2.v3d = x23;
 
-  let x33 = r.v3d.add(down);
+  let x33 = right.v3d.add(down);
   let x3 = new Vector(x33);
   x3.v3d = x33;
 
-  let x43 = r.v3d.sub(up);
+  let x43 = right.v3d.sub(up);
   let x4 = new Vector(x43);
   x4.v3d = x43;
 
-  return [x1, x2, x3, x4]
-}
-
-function encodeUTF8(uint8array) {
-  let utf8 = "";
-  for (let uint8 of uint8array) {
-    utf8 += String.fromCharCode(uint8)
-  }
-  return utf8;
-}
-
-function decodeUTF8(utf8) {
-  let n = utf8.length;
-  let uint8array = new Uint8ClampedArray(n);
-  for (let i = 0; i < n; i++) {
-    uint8array[i] = utf8.charCodeAt(i);
-  }
-  return uint8array
-}
-
-function norm1(utf8){
-  let norms = [];
-  for (let val of utf8) {
-    norms.push(val/255);
-  }
-  return norms;
-}
-
-function pixels2string(pixels) {
-  let string = encodeUTF8(pixels);
-  return string;
-}
-
-export function decode(string) {
-  let ims = WIDTH * HEIGHT;
-  let ps = 4 * 3 * 3;
-  if (string.length != 2*(ims+ps)) throw "invalid input"
-
-  let leftim = string.slice(0, ims);
-  let leftps = string.slice(ims, ims + ps);
-  let rightim = string.slice(ims + ps, ims*2 + ps);
-  let rightps = string.slice(ims*2 + ps);
-
-  let pl = new Float32Array(decodeUTF8(leftps).buffer);
-  let pr = new Float32Array(decodeUTF8(rightps).buffer);
-
-  let x = {
-    left: {
-      pixels: decodeUTF8(leftim),
-      p1: [pl[0], pl[1], pl[2]],
-      p2: [pl[3], pl[4], pl[5]],
-      p3: [pl[6], pl[7], pl[8]],
-    },
-    right: {
-      pixels: decodeUTF8(rightim),
-      p1: [pr[0], pr[1], pr[2]],
-      p2: [pr[3], pr[4], pr[5]],
-      p3: [pr[6], pr[7], pr[8]],
-    },
-    feat: [...norm1(decodeUTF8(leftim)), ...norm1(decodeUTF8(rightim))],//, ...pl, ...pr],
-    feat2: [...pl, ...pr],
-  }
-  return x;
-}
-
-export function extractEyeFeatures(points, canvas) {
-  let {width, height, size3d} = points;
-  let x = "";
-  let boxes = {};
-  let errors = [];
-  for (let key of ["left", "right"]) {
-    try {
-      let {left, right, top, bottom} = points[key];
-      let [x1, x2, x3, x4] = getEyeBoxPoints(left, right, top, bottom);
-      boxes[key] = [x1, x2, x3, x4];
-      let pdata = extractBoxSection(x1, x2, x3, x4, canvas);
-      let farray = new Float32Array([
-        ...x1.v3d.div(size3d).array(), ...x2.v3d.div(size3d).array(), ...x3.v3d.div(size3d).array()
-      ]);
-      x += pixels2string(pdata) + encodeUTF8(new Uint8ClampedArray(farray.buffer))
-    } catch (e) {
-      errors.push(`The ${key} eye is ${e}`)
+  for (let v of [x1, x2, x3, x4]) {
+    if (v.x > eyePoints.width || v.y > eyePoints.height || v.x < 0 || v.y < 0) {
+      warning = "out of frame";
+      break;
     }
   }
 
-  if (errors.length != 0) {
-    throw errors.join(", ");
+  return {topLeft: x1, bottomLeft: x2, bottomRight: x3, topRight: x4, eyeTop: top, eyeBottom: bottom, warning: warning}
+}
+
+
+
+function serialisePixels(pixels) {
+  let str = null;
+  if (pixels != null) {
+    str = "";
+    for (let pi of pixels) {
+      str += String.fromCharCode(Math.round(pi * 255));
+    }
   }
+  return str;
+}
 
-  points.eyeboxes = boxes;
+function deserialisePixels(str, wp, hp) {
+  let pixels = null;
+  if (str != null) {
+    pixels = new Array(str.length);
+    for(let i = 0; i < str.length; i++) {
+      pixels[i] = str.charCodeAt(i) / 255;
+    }
+    pixels.width = wp;
+    pixels.height = hp;
+    pixels.render = (canvas) => renderGray(pixels, canvas, 255);
+  }
+  return pixels;
+}
 
-  return x;
+function serialiseBox(box){
+  let json = {};
+  for (let key in box){
+    let value = box[key];
+    if (key != "warning") {
+      value = value.v3d.toString();
+    }
+    json[key] = value;
+  }
+  return json;
+}
+
+function deserialiseBox(json) {
+  let box = {};
+  for(let key in json) {
+    let value = json[key];
+    if (key != "warning") {
+      let [x, y, z] = value.split(",");
+      value = new Vector(parseFloat(x), parseFloat(y));
+      value.v3d = new Vector3(parseFloat(x), parseFloat(y), parseFloat(z));
+    }
+    box[key] = value;
+  }
+  return box;
 }

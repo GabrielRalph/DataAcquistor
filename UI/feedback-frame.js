@@ -1,87 +1,92 @@
-import {SvgPlus, Vector} from "../SvgPlus/4.js"
+import {Vector} from "../../SvgPlus/4.js"
+import {FloatingBox, HideShow, SvgCanvas, SvgPlus} from "../../Utilities/basic-ui.js"
+import {Webcam} from "../Algorithm/EyeGaze.js"
 
-class FeedbackFrame extends SvgPlus {
+export class FeedbackFrame extends HideShow{
   constructor(el = "feedback-frame"){
     super(el);
-    if (typeof el === "string") this.onconnect();
+    this.size = 1;
+  
+    // Eye box
+    this.eyebox = this.createChild("div", {styles: {overflow: "hidden", display: "flex", position: "relative"}});
+    this.right = this.eyebox.createChild("canvas", {styles: {width: "50%"}});
+    this.left = this.eyebox.createChild("canvas", {styles: {width: "50%"}});
 
-    let opacity = 0;
-    let fader = () => {
-      if (this.fade) opacity -= 0.02;
-      else opacity = 1;
-      if (this.msg){
-        this.msg.styles = {opacity: opacity};
+      // FeedbackFrame
+    this.svgCanvas = this.createChild(SvgCanvas);
+    Webcam.addProcessListener(({features, canvas}) => this.renderFeatures(features, canvas));
+
+  }
+
+  hideEyes(){
+    this.showEyes(false);
+  }
+  showEyes(show = true){
+    if (show && !!this.eyes_hidden) {
+      this.eyebox.styles = {height: "auto"}
+      this.eyes_hidden = false;
+    } else if (!show && !this.eyes_hidden) {
+      this.eyebox.styles = {height: "0px"}
+      this.eyes_hidden = true;
+    }
+  }
+
+  ondblclick(){
+    console.log(this.eyes_hidden);
+    this.showEyes(!!this.eyes_hidden)
+  }
+
+
+  renderTransformVector(features) {
+    let svg = this.svgCanvas.svg;
+    let {offset, direction} = features.transform;
+    let p2 = offset.v3d.sub(direction.mul(50));
+    svg.createChild("path", {
+      stroke: "black",
+      "stroke-width": 3,
+      d: `M${offset}L${p2.x},${p2.y}`
+    })
+  }
+
+  renderEyes(features){
+    let svg = this.svgCanvas.svg;
+
+    for (let key of ["left", "right"]) {
+      if (features[key].box.topLeft) {
+        let {topLeft, topRight, bottomRight, bottomLeft, warning} = features[key].box;
+        svg.createChild("path", {
+          d: `M${topLeft}L${topRight}L${bottomRight}L${bottomLeft}Z`,
+          fill: warning ? "#ff000044" : "#00ff0044"
+        })
       }
-      window.requestAnimationFrame(fader);
+      if (features[key].pixels) {
+        features[key].pixels.render(this[key]);
+      }
     }
-    window.requestAnimationFrame(fader);
-  }
-  onconnect(){
-    this.innerHTML = "";
-		this.styles = {
-      display: "flex",
-      transform: "scale(-1, 1)"
-
-    }
-    let rel = this.createChild("div", {styles: {
-			position: "relative",
-			display: "inline-flex",
-			width: "100%",
-		}});
-    this.canvas = rel.createChild("canvas", {styles: {
-			width: "100%",
-		}});
-    this.svg = rel.createChild("svg", {styles:{
-			position: "absolute",
-			top: 0,
-			left: 0,
-			right: 0,
-			bottom: 0,
-			opacity: 0,
-		}});
-    this.msg = rel.createChild("div", {class: "msg",styles:{
-			position: "absolute",
-			opacity: 0,
-		}});
   }
 
-  updateCanvas(source, clear = true) {
-    let {canvas, svg} = this;
-    try {
-      let {width, height} = source;
-      canvas.width = width;
-      canvas.height = height;
-      let destCtx = canvas.getContext('2d');
-      destCtx.drawImage(source, 0, 0);
-      svg.props = {viewBox: `0 0 ${width} ${height}`, style: {opacity: 1}}
-    } catch (e) {
-      console.log(e);
-      svg.styles = {opacity: 0}
-    }
 
-		if (clear) svg.innerHTML = ""
+  renderFeatures(features, canvas) {
+    if (!canvas) {
+      canvas = new SvgPlus("canvas");
+      canvas.width = features.videoWidth;
+      canvas.height = features.videoHeight;
+    } 
+    this.svgCanvas.updateCanvas(canvas);
+
+
+    for (let rtype of ["renderEyes"]){
+      try {
+        this[rtype](features);
+      } catch (e){}
+    }
+    
   }
 
-  set error(value) {
-    let {msg, svg} = this;
-    if (value != null) {
-      msg.innerHTML = value;
-      this.fade = false;
-    } else {
-      this.fade = true;
-    }
-    svg.toggleAttribute('valid', value == null);
-  }
-
-  transform(x,y,scale,angle,group) {
-    let p = new Vector(x, y);
-    p = p.div(scale);
-    p = p.rotate(-angle);
-		let transform = `rotate(${angle*180/Math.PI}) scale(${s}) translate(${p.x}, ${p.y})`
-    if (group) group.setAttribute('transform', transform);
-		return transform;
+  /**
+   * @param {any} stream
+   */
+  set videoStream(stream) {
+    this.svgCanvas.video.srcObject = stream;
   }
 }
-
-// SvgPlus.defineHTMLElement(FeedbackFrame);
-export {Vector, FeedbackFrame}
