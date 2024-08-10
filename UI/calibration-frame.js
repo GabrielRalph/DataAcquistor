@@ -110,7 +110,7 @@ class CalibrationFrame extends HideShow {
 
 	async calibrate_grid(grid = 3, counts = 4) {
 		let { tl, tr, bl, br } = this;
-		this.sample_method = "static";
+		this.ctype = `grid${grid}t${counts}`
 		let points = dotGrid(grid, tl, tr, bl, br);
 		await this.showMessageCountDown("Focus on the red dot<br/>as it appears on the screen.<br/>$$");
 		await this.calibrate_points(points, counts);
@@ -142,7 +142,7 @@ class CalibrationFrame extends HideShow {
 		else if (bbox.height > bbox.width) t1 = max_time * bbox.width / bbox.heipght;
 
 		
-
+		this.ctype = `scan${divs}t${max_time}`
 		let ext = [[this.tl, this.bl, this.tr, this.br, t1], [this.tl, this.tr, this.bl, this.br, t2]];
 		for (let [pa1, pa2, pb1, pb2, time] of ext) {
 
@@ -182,7 +182,8 @@ class CalibrationFrame extends HideShow {
 		await this.showMessage("Calibrating eye tracking...");
 		let error = await Algorithm.trainModel();
 		console.log(error);
-		this.std = error.validation.std.norm();
+		// this.std = error.validation.std.norm();
+
 		await this.hideMessage();
 	}
 

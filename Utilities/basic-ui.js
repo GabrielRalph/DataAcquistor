@@ -575,9 +575,10 @@ const POINTERS = {
     }
   },
   blob: class BPointer extends BasePointer {
-    constructor(size=5, bufferLength = 7){
+    constructor(size=5, bufferLength = 7, color = "black"){
       super();
         // svg filter to create merged blobs
+        this.color = color;
         this.innerHTML = `
         <defs>
           <filter id="filter" x="-20%" y="-20%" width="140%" height="140%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse" color-interpolation-filters="linearRGB">
@@ -620,11 +621,11 @@ const POINTERS = {
       if (this.positionBuffer.length > 0) {
         let size = this.size;
         let p0 = this.positionBuffer[0];
-        this.g.createChild("circle", {r: size});
+        this.g.createChild("circle", {r: size, fill: this.color});
         for (let i = 1; i < this.positionBuffer.length; i++) {
           size /= 1.35;
           let v = this.positionBuffer[i].sub(p0);
-          this.g.createChild("circle", {r: size, cx: v.x, cy: v.y})
+          this.g.createChild("circle", {r: size, cx: v.x, cy: v.y, fill: this.color})
         }
       }
     }
@@ -707,6 +708,13 @@ export class SvgCanvas extends SvgPlus {
 			position: "absolute",
 			opacity: 0,
 		}});
+  }
+
+  updateSize(clear = true){
+    let {canvas, svg} = this;
+    let {width, height} = canvas;
+    svg.props = {viewBox: `0 0 ${width} ${height}`, style: {opacity: 1}}
+		if (clear) svg.innerHTML = ""
   }
 
   updateCanvas(source, clear = true) {

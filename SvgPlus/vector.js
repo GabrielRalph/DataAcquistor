@@ -170,6 +170,13 @@ class Vector {
       throw new NaNError("Argument", "")
     return atan(this._y, this._x);
   }
+
+  abs(){
+    if (this.isNaN)
+      throw new NaNError("Argument", "")
+    return new Vector(Math.abs(this._y), Math.abs(this._x));
+  }
+
   dir(){
     let norm = this.norm();
     if(isZero(norm)) {

@@ -49,12 +49,22 @@ export async function trainModel(sampleRate = 0.8){
   Webcam.stopProcessing();
   let stats = null;
   try{
-    let ModelClass = getModel(SelectedModel);
-    if (ModelClass != null) {
-      Model = new ModelClass();
-      stats = await Model.trainAndValidate(SampleData, sampleRate);
+    if (SelectedModel == "all") {
+      let models = getModels();
+      Model = {};
+      stats = {}
+      for (let key in models) {
+        Model[key] = new models[key]();
+        stats[key] = await Model[key].trainAndValidate(SampleData, sampleRate)
+      }
     } else {
-      throw "No model exists with the name " + SelectedModel;
+      let ModelClass = getModel(SelectedModel);
+      if (ModelClass != null) {
+        Model = new ModelClass();
+        stats = await Model.trainAndValidate(SampleData, sampleRate);
+      } else {
+        throw "No model exists with the name " + SelectedModel;
+      }
     }
   } catch (e) {
     console.log("training error", e);
@@ -68,9 +78,18 @@ export async function trainModel(sampleRate = 0.8){
 function predictScreenPosition(X, kfilter = true) {
   let y = null;
   if (Model) {
-    try {
-      y = Model.predictAndFilter(X);
-    } catch(e) {console.log(e);}
+    if (Model instanceof EyeGazeModelInterface) {
+      try {
+        y = Model.predictAndFilter(X);
+      } catch(e) {console.log(e);}
+    } else {
+      y = {}
+      for (let key in Model) {
+        try {
+          y[key] = Model[key].predictAndFilter(X);
+        } catch(e) {console.log(e);}
+      }
+    }
   }
   return y;
 }

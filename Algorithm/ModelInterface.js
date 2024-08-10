@@ -20,14 +20,20 @@ function sampleSelect(points, sampleRate){
 }
 function getDeltaStats(deltas){
   let sum = new Vector(0);
+  let mae = new Vector(0);
+  let mse = 0;
   let n = 0;
   for (let v of deltas) {
     if (v instanceof Vector) {
       sum = sum.add(v);
+      mae = mae.add(v.abs());
+      mse += v.norm();
       n++;
     }
   }
   let mean = sum.div(n);
+  mae = mae.div(n);
+  mse = mse / n;
 
   let ss = new Vector(0);
   for (let v of deltas) {
@@ -37,7 +43,7 @@ function getDeltaStats(deltas){
     }
   }
   let std = ss.div(n).sqrt()
-  return {mean, std, deltas};
+  return {mean, std, deltas, mae, mse};
 }
 function getRegionStats(yp, yr, gsize = 5){
   let positions = {};
@@ -133,6 +139,8 @@ class EyeGazeModelInterface {
    * @return {String}
    */
   static get name(){ return "model-name"}
+
+  static get color(){return "black"}
 }
 
 export {Vector, EyeGazeModelInterface}

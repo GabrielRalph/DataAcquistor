@@ -2,15 +2,15 @@ import {EyeGazeModelInterface, Vector} from "../ModelInterface.js"
 import {ridgeregvec} from "./ridgereg.js"
 
 
-const FEATURE_SET = [112, 26, 22, 23, 24, 110, 25, 33, 246, 161, 160, 159, 158, 157, 173, 243, 469, 470, 471, 472, 468, 463, 398, 384, 385, 386, 387, 388, 466, 263, 255, 339, 254, 253, 252, 256, 341, 474, 475, 476, 477, 473, 4, 243, 463]
-console.log(FEATURE_SET.length * 3);
+const FEATURE_SET = [398, 359, 173, 130, 468, 473, 4, 243, 463];
+
 function getFacePointFeatures(X) {
     let newX = FEATURE_SET.map(i => X.facePoints.all[i]).flatMap(({v3d}) => [v3d.x, v3d.y, v3d.z]);
     return newX;
 }
 
 
-export default class RRVectors extends EyeGazeModelInterface {
+export default class RRVectorsRedRed extends EyeGazeModelInterface {
   train(data) {
     let myX = [];
     console.log(data);
@@ -41,10 +41,10 @@ export default class RRVectors extends EyeGazeModelInterface {
   }
 
   static get name(){
-    return "RRVectors"
+    return "RRVectorsReduced2"
   }
 
   static get color(){
-    return "blue"
+    return "purple"
   }
 }

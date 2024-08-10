@@ -1,6 +1,8 @@
 
 const MODEL_SRCS = [
     "./RidgeReg/RRVectors.js",
+    "./RidgeReg/RRVectorsRed.js",
+    "./RidgeReg/RRVectorsRedRed.js",
     "./EModel/emodel.js",
 ]
 
@@ -27,6 +29,14 @@ function getModels(){
     return mods;
 }
 
+function getModelColors(){
+  let colors = {};
+  for (let key in Models) {
+      colors[key] = Models[key].color;
+  }
+  return colors;
+}
+
 function getModel(key){
   let model = null;
   if (key in Models) {
@@ -36,4 +46,4 @@ function getModel(key){
 }
 
 
-export {getModels, getModel}
+export {getModels, getModel, getModelColors}

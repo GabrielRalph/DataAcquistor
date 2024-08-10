@@ -1,13 +1,13 @@
 import {Vector3, Vector} from "../Utilities/vector3.js"
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Default Parameters ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
-const WIDTH = 20;
-const HEIGHT = 10;
+const WIDTH = 50;
+const HEIGHT = 30;
 const H2T = 0.5;         // Represents the ratio of the height of the eye to the center
-const BLINKRATIO = 0.17; // If the distance from the top of the eye to the bottom (height)
+const BLINKRATIO = 0.15; // If the distance from the top of the eye to the bottom (height)
                          // is less than the width of the eye times the blink ratio
                          // the feature extraction will fail
-const MINSIZERATIO = 0.9 // If the width of the eye is less than the min size ratio
+const MINSIZERATIO = 0.4 // If the width of the eye is less than the min size ratio
                          // times the fixed width and height feature extraction
                          // will fail
 
@@ -36,10 +36,20 @@ const MINSIZERATIO = 0.9 // If the width of the eye is less than the min size ra
  */
 
 /**
+ * @typedef EyePixelTransform
+ * @type {Object}
+ * @property {Vector} scale
+ * @property {Vector} translation
+ * @property {Number} rotation
+ * 
+ */
+
+/**
  * @typedef EyeFeatures
  * @type {object}
  * @property {EyeBox} box 
  * @property {EyePixels} pixels 
+ * @property {EyePixelTransform} transform 
  */
 
 
@@ -91,6 +101,7 @@ export function extractEyeFeatures(facePoints, canvas, w = WIDTH, h = HEIGHT) {
    for (let key of ["left", "right"]) {
      let eyeBox = {warning: "not detected"};
      let eyePixels = null;
+     let eyePixelsTransform = null;
      let pkey = key + "eye";
 
      if (pkey in facePoints) {
@@ -98,7 +109,7 @@ export function extractEyeFeatures(facePoints, canvas, w = WIDTH, h = HEIGHT) {
        eyepoints.width = width;
        eyepoints.height = height;
        eyeBox = getEyeBoundingBox(eyepoints, h/w, w * MINSIZERATIO);
-       eyePixels = extractEyeBoxPixels(eyeBox, canvas, w, h);
+       [eyePixels, eyePixelsTransform] = extractEyeBoxPixels(eyeBox, canvas, w, h);
        eyePixels = equalizeHistogram(eyePixels, 5);
        eyePixels = im2double(eyePixels);
      }
@@ -106,14 +117,14 @@ export function extractEyeFeatures(facePoints, canvas, w = WIDTH, h = HEIGHT) {
 
      features[key] = {
        box: eyeBox,
-       pixels: eyePixels
+       pixels: eyePixels,
+       transform: eyePixelsTransform
      }
 
      if (eyeBox.warning) errors.push(`The ${key} eye is ${eyeBox.warning}`);
    }
    if (errors.length != 0) features.warning = errors.join(", ");
  } catch (e) {
-   console.log(e);
    features.errors = e;
  }
  features.facePoints = facePoints;
@@ -270,16 +281,18 @@ function extractEyeBoxPixels(eyeBox, canvas, w = WIDTH, h = HEIGHT) {
 
   let ws = w/lr.norm();
   let hs = h/topLeft.dist(bottomLeft);
+  let transform = {translation: topLeft, scale: new Vector(ws, hs), rotation: angle}
   CTX.resetTransform();
   CTX.scale(ws, hs);
   CTX.rotate(angle);
   CTX.translate(-topLeft.x, -topLeft.y);
+
   CTX.drawImage(canvas, 0, 0);
   CTX.save();
   let data = CTX.getImageData(0, 0, w, h);
 
   let gray = grayscale(data, w, h);
-  return gray;
+  return [gray, transform];
 }
 
 // Given the points on the top, bottom, left and right of the eye find the cor
@@ -292,6 +305,7 @@ function getEyeBoundingBox(eyePoints, w2h, minW, h2t = H2T){
   let w = lr.norm();
   let h = w * w2h;
   let tbn = tb.norm();
+
 
   if (tbn < w * BLINKRATIO) warning = 'blinking'
   if (w < minW) warning = 'to small'

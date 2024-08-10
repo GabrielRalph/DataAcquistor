@@ -6,7 +6,7 @@ import {CalibrationFrame, defaultCalibration} from "./UI/calibration-frame.js"
 import {FeedbackFrame} from "./UI/feedback-frame.js"
 import { delay, parallel } from "./Utilities/usefull-funcs.js";
 import { HideShow, SvgResize} from "./Utilities/basic-ui.js";
-import { getModels } from "./Algorithm/ModelLibrary.js";
+import { getModelColors, getModels } from "./Algorithm/ModelLibrary.js";
 
 
 
@@ -45,6 +45,7 @@ class CalibrationParams extends SvgPlus {
     let s = r.createChild("select");
     console.log(getModels());
     for (let m in getModels()) s.createChild("option", {content: m, value: m});
+    s.createChild("option", {content: "all", value: "all"});
     this.modelSelect = s;
 
 
@@ -283,6 +284,38 @@ class ResultsWindow extends HideShow {
   }
 }
 
+
+class ProgressLoader extends HideShow {
+  constructor(){
+    super('svg');
+
+    this.props = {class: "load", viewBox: "-7 -7 14 14"};
+    this.path = this.createChild("path");
+    this.text = this.createChild("text", {x: 0, "text-anchor": "middle", "font-size": 2, y: 0.6})
+    this.progress = 0;
+  }
+
+  set progress(num) {
+    if (num > 1) num = 1;
+    if (num < 0) num = 0;
+    let angle = Math.PI * 2 * (1 - num)
+    let p1 = new Vector(0, 5);
+    let p2 = p1.rotate(angle);
+    if (num > 0 && num < 1) {
+      this.path.props = {d: `M${p1}A5,5,1,${angle > Math.PI ? 0 : 1},0,${p2}`};
+    } else if (num == 1) {
+      this.path.props = {d: `M0,5A5,5,0,0,0,0,-5A5,5,0,0,0,0,5`}
+    }else {
+      this.path.props = {d: ""};
+    }
+    this.text.innerHTML = Math.round(num*100) + "%";
+    this._progress = num;
+  }
+  get progress(){
+    return this._progress;
+  }  
+}
+
 class EyeApp extends SvgPlus {
   async onconnect(){
     this.styles = {
@@ -361,9 +394,22 @@ class EyeApp extends SvgPlus {
       "pointer-events": "none"
     }})
     this.ghost = pointers.createPointer("relative");
-    this.blob = pointers.createPointer("blob", 15, 10);
+    this.cursors = {
+      blob: pointers.createPointer("blob", 15, 10)
+    }
     pointers.start();
     pointers.show();
+    this.pointers = pointers;
+
+    this.progressLoader = this.createChild(ProgressLoader, {styles: {
+      position: "fixed",
+      top: "50%",
+      width: "25%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      background: "#fffa",
+      "border-radius": "1000px"
+    }})
 
 
     /** @type {CalibrationParams} */
@@ -386,26 +432,36 @@ class EyeApp extends SvgPlus {
     })
   }
 
+
   async saveRecording(){
     if (!this._saving) {
       this._saving = true;
       this.results.buttons.disabled = true;
+      this.progressLoader.show();
 
       // zip all data points together with file name $timesampe_$position_$calibration-type.jpeg
       const zipWriter = new zip.ZipWriter(new zip.BlobWriter("application/zip"));
-      await Promise.all(
-        images.map(([ts, pos, img, ctype]) => zipWriter.add(`${ts}_(${pos})_${ctype}.jpeg`, new zip.Data64URIReader(img)) )
-      );
+
+      let progress = 0;
+      let n = images.length;
+      let addFile = async ([ts, pos, img, ctype]) => {
+        await zipWriter.add(`${ts}_(${pos})_${ctype}.jpeg`, new zip.Data64URIReader(img))
+        progress += 1;
+        this.progressLoader.progress = progress/n;
+      }
+
+      await Promise.all(images.map(addFile));
 
       // create blob from zip and download it
       let blob = await zipWriter.close();
+      console.log("here");
       let a = this.createChild("a", {
         download: "eyedata_" + (new Date()).getTime() + ".zip",
         href: URL.createObjectURL(blob),
         textContent: "Download zip file",
       })
       a.click();
-
+      this.progressLoader.hide();
       this.results.buttons.disabled =false;
       this._saving = false;
     }
@@ -437,13 +493,13 @@ class EyeApp extends SvgPlus {
   }
 
   async playRecording(){
-    await parallel(this.ghost.show(), this.blob.show());
+    await parallel(this.ghost.show());
     // animate results
     await this.results.animate(images, (dataPoint) => {
       // for each data point show where the calibration dot was
       this.ghost.position = dataPoint[1];
     })
-    await parallel(this.ghost.hide(), this.blob.show());
+    await parallel(this.ghost.hide());
   }
 
   async calibrate(){
@@ -470,16 +526,23 @@ class EyeApp extends SvgPlus {
     if (this.calibrator.recording || this.capture) {
       images.push([(new Date()).getTime(), this.calibrator.position, input.canvas.toDataURL("image/jpeg"), this.calibrator.ctype]);
     }
-
+    // console.log(input.result);
     if (input.result) {
-      let p = input.result;
-      if (p.x > 1) p.x = 1;
-      if (p.x < 0) p.x = 0;
-
-      if (p.y > 1) p.y = 1;
-      if (p.y < 0) p.y = 0;
-      let r = this.blob.fromRelative(p);
-      this.blob.position = r;
+      let res = input.result;
+      if (input.result instanceof Vector) res = {blob: res};
+      for (let key in res) {
+        if (!(key in this.cursors)) this.cursors[key] = this.pointers.createPointer("blob", 15, 10, getModelColors()[key]);
+        let cursor = this.cursors[key];
+        if (!cursor.shown) cursor.show();
+        let p = res[key]
+        if (p.x > 1) p.x = 1;
+        if (p.x < 0) p.x = 0;
+  
+        if (p.y > 1) p.y = 1;
+        if (p.y < 0) p.y = 0;
+        let r = cursor.fromRelative(p);
+        cursor.position = r;
+      }
     }
   }
 }
