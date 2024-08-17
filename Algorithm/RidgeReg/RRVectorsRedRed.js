@@ -2,7 +2,7 @@ import {EyeGazeModelInterface, Vector} from "../ModelInterface.js"
 import {ridgeregvec} from "./ridgereg.js"
 
 
-const FEATURE_SET = [398, 359, 173, 130, 468, 473, 4, 243, 463];
+const FEATURE_SET = [468, 473, 4];
 
 function getFacePointFeatures(X) {
     let newX = FEATURE_SET.map(i => X.facePoints.all[i]).flatMap(({v3d}) => [v3d.x, v3d.y, v3d.z]);
