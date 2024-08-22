@@ -1,11 +1,11 @@
 
 const MODEL_SRCS = [
-    "./RidgeReg/RRVectors.js",
-    "./RidgeReg/RRVectorsRed.js",
-    "./RidgeReg/RRVectorsRedRed.js",
-    "./EModel/emodel.js",
+    // "./RidgeReg/RRVectors.js",
+    // "./RidgeReg/RRVectorsRed.js",
+    // "./RidgeReg/RRVectorsRedRed.js",
+    "./EModel/emodel150.js",
     "./EModel/emodelf13.js",
-    "./EModel/class_model.js",
+    // "./EModel/class_model.js",
 ]
 
 let Models = {};
