@@ -36,9 +36,9 @@ export default class Model500 extends EyeGazeModelInterface {
      * @param {import("https://eye.w4v.es/Algorithm/ModelInterface.js").DataPoint[]} trainData
      */ 
     async train(trainData) {
-        let x = tf.tensor(trainData.map(({X}) => getFeatures(X)));
-        let y = tf.tensor2d(trainData.map(({y}) => [y.x, y.y]));
-        await model.fit(x, y);
+        // let x = tf.tensor(trainData.map(({X}) => getFeatures(X)));
+        // let y = tf.tensor2d(trainData.map(({y}) => [y.x, y.y]));
+        // await model.fit(x, y);
     }
 
     /** 
