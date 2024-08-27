@@ -1,4 +1,4 @@
-import { EyeGazeModelInterface, Vector } from "../ModelInterface.js";
+import { EyeGazeModelInterface, Vector } from "https://eye.w4v.es/Algorithm/ModelInterface.js";
 
 
 class L2 {
@@ -11,7 +11,7 @@ class L2 {
 tf.serialization.registerClass(L2);
 let model = undefined;
 
-model = await tf.loadLayersModel("./Algorithm/EModel/model(2024-08-22 14_32)/model.json");
+model = await tf.loadLayersModel("./Algorithm/EModel/files/model.json");
 console.log(model);
 model.compile({
     optimizer: tf.train.adam(0.001),
@@ -21,7 +21,7 @@ model.compile({
 
 const features = [398, 253, 386, 359, 173, 23, 130, 159, 468, 473, 4, 243, 463]
 
-/** @param {import("../ModelInterface.js").DataPoint} X */
+/** @param {import("https://eye.w4v.es/Algorithm/ModelInterface.js").DataPoint} X */
 function getFeatures(X) {
     return features.map(i => {
         let v = X.facePoints.allNoScale[i];
@@ -29,11 +29,11 @@ function getFeatures(X) {
     });
 }
 
-export default class Model150 extends EyeGazeModelInterface {
+export default class Model500 extends EyeGazeModelInterface {
     
      /** 
      * @override
-     * @param {import("../ModelInterface.js").DataPoint[]} trainData
+     * @param {import("https://eye.w4v.es/Algorithm/ModelInterface.js").DataPoint[]} trainData
      */ 
     async train(trainData) {
         let x = tf.tensor(trainData.map(({X}) => getFeatures(X)));
@@ -43,28 +43,22 @@ export default class Model150 extends EyeGazeModelInterface {
 
     /** 
      * @override
-     * @param {import("../ModelInterface.js").Features} x
+     * @param {import("https://eye.w4v.es/Algorithm/ModelInterface.js").Features} x
      */ 
     predict(x){
-        // if (this.min) {
-            let x2 = tf.tensor3d([getFeatures(x)]);
-            let y = model.predict(x2);
-            let buff = y.bufferSync().values;
-            let y2 =new Vector(buff[0], buff[1]) 
-            // y2 = y2.sub(this.min).div(this.max.sub(this.min));
-            // console.log(y2);
-            return y2;
-        // } else {
-        //     return null;
-        // }
-
+        let x2 = tf.tensor3d([getFeatures(x)]);
+        let y = model.predict(x2);
+        let buff = y.bufferSync().values;
+        let y2 =new Vector(buff[0], buff[1]) 
+        
+        return y2;
     }
 
     static get name(){
-        return "emodel-150"
+        return "emodel-500"
     }
 
     static get color(){
-        return "blue"
+        return "#81d505"
     }
 }

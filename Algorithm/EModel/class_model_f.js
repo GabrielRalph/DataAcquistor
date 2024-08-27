@@ -10,7 +10,7 @@ class L2 {
 }
 tf.serialization.registerClass(L2);
 let model = undefined;
-model = await tf.loadLayersModel("./Algorithm/EModel/model_class(2024-08-22 13_55)/model.json");
+model = await tf.loadLayersModel("./Algorithm/EModel/model_class(2024-08-22 13_19)/model.json");
 console.log(model);
 model.compile({
     optimizer: tf.train.adam(0.001),
@@ -28,7 +28,7 @@ function getFeatures(X) {
     });
 }
 
-export default class ModelClass extends EyeGazeModelInterface {
+export default class ModelClassF extends EyeGazeModelInterface {
     
      /** 
      * @override
@@ -52,12 +52,12 @@ export default class ModelClass extends EyeGazeModelInterface {
             let c = buff.indexOf(Math.max(...buff));
 
             console.log(c);
-            let x_c = c%3 ;
-            let y_c = Math.floor(c/3)
+            let x_c = c%4 ;
+            let y_c = Math.floor(c/4)
 
             
 // 
-            let y2 = new Vector((x_c+0.5)/3, (y_c+0.5)/3)
+            let y2 = new Vector((x_c+0.5)/4, (y_c+0.5)/4)
             // y2 = y2.sub(this.min).div(this.max.sub(this.min));
             console.log(y2);
             return y2;
@@ -68,10 +68,10 @@ export default class ModelClass extends EyeGazeModelInterface {
     }
 
     static get name(){
-        return "class-model"
+        return "class-model-f"
     }
 
     static get color(){
-        return "magenta"
+        return "orange"
     }
 }
